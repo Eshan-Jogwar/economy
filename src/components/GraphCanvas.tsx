@@ -4,13 +4,8 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
-  Unlink,
-  X,
-  Building2,
-  Landmark,
-  UserCheck,
-  Coins,
-  Flame,
+  Scissors,
+  HelpCircle,
 } from 'lucide-react'
 import {
   SimulationNode,
@@ -22,6 +17,7 @@ import {
 import { NodeView } from './NodeView'
 import { EdgeView } from './EdgeView'
 import { ParticleLayer } from './ParticleLayer'
+import { AddNodeMenu } from './AddNodeMenu'
 
 interface GraphCanvasProps {
   nodes: SimulationNode[]
@@ -33,13 +29,75 @@ interface GraphCanvasProps {
   onSelectNode: (nodeId: string | null) => void
   onSelectTransaction: (txId: string | null) => void
   onUpdateNodePosition: (nodeId: string, position: { x: number; y: number }) => void
-  onAddNode: (role: NodeRole, label: string) => void
+  onRequestCreateNode: (role: NodeRole, position: { x: number; y: number }) => void
   onDeleteNode: (nodeId: string) => void
-  onCreateTransaction: (sourceId: string, targetId: string) => void
+  onDuplicateNode?: (nodeId: string) => void
+  onRequestCreateTransaction: (sourceId: string, targetId: string) => void
   onDeleteTransaction: (txId: string) => void
 }
 
 const NODE_DIMENSIONS = { width: 220, height: 130 }
+
+// Helper: 2D line segment orientation
+function ccw(p1: { x: number; y: number }, p2: { x: number; y: number }, p3: { x: number; y: number }): boolean {
+  return (p3.y - p1.y) * (p2.x - p1.x) > (p2.y - p1.y) * (p3.x - p1.x)
+}
+
+// Helper: 2D line segments intersection check
+function segmentsIntersect(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  c: { x: number; y: number },
+  d: { x: number; y: number }
+): boolean {
+  return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d)
+}
+
+// Helper: Check if knife line intersects cubic Bezier edge
+function knifeCutsEdge(
+  knifeStart: { x: number; y: number },
+  knifeEnd: { x: number; y: number },
+  src: { x: number; y: number },
+  tgt: { x: number; y: number }
+): boolean {
+  const srcX = src.x + NODE_DIMENSIONS.width
+  const srcY = src.y + NODE_DIMENSIONS.height / 2
+  const tgtX = tgt.x
+  const tgtY = tgt.y + NODE_DIMENSIONS.height / 2
+
+  const dx = Math.max(Math.abs(tgtX - srcX) * 0.55, 60)
+  const ctrl1X = srcX + dx
+  const ctrl1Y = srcY
+  const ctrl2X = tgtX - dx
+  const ctrl2Y = tgtY
+
+  // Sample 8 points along the cubic bezier
+  const samples: { x: number; y: number }[] = []
+  const steps = 8
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    const invT = 1 - t
+    const x =
+      invT * invT * invT * srcX +
+      3 * invT * invT * t * ctrl1X +
+      3 * invT * t * t * ctrl2X +
+      t * t * t * tgtX
+    const y =
+      invT * invT * invT * srcY +
+      3 * invT * invT * t * ctrl1Y +
+      3 * invT * t * t * ctrl2Y +
+      t * t * t * tgtY
+    samples.push({ x, y })
+  }
+
+  for (let i = 0; i < samples.length - 1; i++) {
+    if (segmentsIntersect(knifeStart, knifeEnd, samples[i], samples[i + 1])) {
+      return true
+    }
+  }
+
+  return false
+}
 
 export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   nodes,
@@ -51,9 +109,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   onSelectNode,
   onSelectTransaction,
   onUpdateNodePosition,
-  onAddNode,
+  onRequestCreateNode,
   onDeleteNode,
-  onCreateTransaction,
+  onDuplicateNode,
+  onRequestCreateTransaction,
   onDeleteTransaction,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -73,12 +132,35 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     initialNodeY: 0,
   })
 
-  // Connection Drawing
+  // Blender Connection Dragging
   const [connectingSourceId, setConnectingSourceId] = useState<string | null>(null)
   const [mouseCanvasPos, setMouseCanvasPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [hoveredTargetNodeId, setHoveredTargetNodeId] = useState<string | null>(null)
 
-  // Add Node Menu dropdown
-  const [showAddMenu, setShowAddMenu] = useState(false)
+  // Blender Add Node Menu (Shift+A or Right-Click)
+  const [addMenuState, setAddMenuState] = useState<{
+    isOpen: boolean
+    screenPos: { x: number; y: number }
+    canvasPos: { x: number; y: number }
+  }>({
+    isOpen: false,
+    screenPos: { x: 200, y: 200 },
+    canvasPos: { x: 300, y: 250 },
+  })
+
+  // Blender Knife Tool (Ctrl + Right Click Drag)
+  const [knifeCut, setKnifeCut] = useState<{
+    active: boolean
+    startCanvas: { x: number; y: number }
+    endCanvas: { x: number; y: number }
+  }>({
+    active: false,
+    startCanvas: { x: 0, y: 0 },
+    endCanvas: { x: 0, y: 0 },
+  })
+
+  // Track latest mouse screen position for Shift+A placement
+  const lastMousePosRef = useRef<{ clientX: number; clientY: number }>({ clientX: 400, clientY: 300 })
 
   // Map of node positions
   const nodePositionMap: Record<string, { x: number; y: number }> = {}
@@ -120,8 +202,23 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     }
   }
 
-  // Handle canvas background mouse down (start panning)
+  // Handle canvas background mouse down (Panning or Knife cutting)
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    lastMousePosRef.current = { clientX: e.clientX, clientY: e.clientY }
+
+    // Ctrl + Right Click = Knife Cutter Tool
+    if (e.button === 2 && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      const canvasPos = screenToCanvas(e.clientX, e.clientY)
+      setKnifeCut({
+        active: true,
+        startCanvas: canvasPos,
+        endCanvas: canvasPos,
+      })
+      return
+    }
+
+    // Normal Left Click or Middle Click = Canvas Pan & Deselect
     if (e.button === 0 || e.button === 1) {
       setIsPanning(true)
       panStartRef.current = {
@@ -135,7 +232,24 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       if (connectingSourceId) {
         setConnectingSourceId(null)
       }
+      setAddMenuState((prev) => ({ ...prev, isOpen: false }))
     }
+  }
+
+  // Right Click on Canvas: Open Add Node Menu if not Knife cutting
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (e.ctrlKey || e.metaKey) {
+      // Handled by knife cutter
+      return
+    }
+
+    const canvasPos = screenToCanvas(e.clientX, e.clientY)
+    setAddMenuState({
+      isOpen: true,
+      screenPos: { x: e.clientX, y: e.clientY },
+      canvasPos,
+    })
   }
 
   // Start dragging a node
@@ -156,28 +270,75 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     }
   }
 
-  // Start connecting from a node
-  const handleStartConnect = (nodeId: string) => {
+  // Start connecting wire from an output socket
+  const handleStartConnect = (e: React.MouseEvent, nodeId: string) => {
+    e.stopPropagation()
     setConnectingSourceId(nodeId)
     onSelectNode(nodeId)
     onSelectTransaction(null)
+    setMouseCanvasPos(screenToCanvas(e.clientX, e.clientY))
   }
 
-  // Complete connection to a target node
+  // Complete connection to a target node: triggers CreateEdgeModal
   const handleCompleteConnect = (targetNodeId: string) => {
     if (connectingSourceId && connectingSourceId !== targetNodeId) {
-      onCreateTransaction(connectingSourceId, targetNodeId)
+      onRequestCreateTransaction(connectingSourceId, targetNodeId)
     }
     setConnectingSourceId(null)
+    setHoveredTargetNodeId(null)
+  }
+
+  // Open Add Node Menu via toolbar or hotkey
+  const handleOpenAddMenu = (screenPos?: { x: number; y: number }, canvasPos?: { x: number; y: number }) => {
+    const sPos = screenPos || { x: window.innerWidth / 2 - 140, y: window.innerHeight / 2 - 180 }
+    const cPos = canvasPos || screenToCanvas(sPos.x, sPos.y)
+    setAddMenuState({
+      isOpen: true,
+      screenPos: sPos,
+      canvasPos: cPos,
+    })
+  }
+
+  // When role is selected from AddNodeMenu: triggers CreateNodeModal
+  const handleSelectRoleFromAddMenu = (role: NodeRole) => {
+    const targetPos = addMenuState.canvasPos
+    setAddMenuState((prev) => ({ ...prev, isOpen: false }))
+    onRequestCreateNode(role, targetPos)
   }
 
   // Window mouse move & up listeners
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
+      lastMousePosRef.current = { clientX: e.clientX, clientY: e.clientY }
+      const canvasPos = screenToCanvas(e.clientX, e.clientY)
+
+      // Live wire dragging
       if (connectingSourceId) {
-        setMouseCanvasPos(screenToCanvas(e.clientX, e.clientY))
+        setMouseCanvasPos(canvasPos)
+
+        // Check which node cursor is currently hovering over
+        let foundHover: string | null = null
+        for (const n of nodes) {
+          if (n.id === connectingSourceId) continue
+          const inX = canvasPos.x >= n.position.x - 20 && canvasPos.x <= n.position.x + NODE_DIMENSIONS.width + 20
+          const inY = canvasPos.y >= n.position.y - 10 && canvasPos.y <= n.position.y + NODE_DIMENSIONS.height + 10
+          if (inX && inY) {
+            foundHover = n.id
+            break
+          }
+        }
+        setHoveredTargetNodeId(foundHover)
       }
 
+      // Knife tool dragging
+      if (knifeCut.active) {
+        setKnifeCut((prev) => ({
+          ...prev,
+          endCanvas: canvasPos,
+        }))
+      }
+
+      // Pan canvas
       if (isPanning) {
         const dx = e.clientX - panStartRef.current.x
         const dy = e.clientY - panStartRef.current.y
@@ -187,6 +348,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         })
       }
 
+      // Drag node
       if (draggingNodeId) {
         const dx = (e.clientX - dragStartRef.current.mouseX) / zoom
         const dy = (e.clientY - dragStartRef.current.mouseY) / zoom
@@ -196,9 +358,31 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       }
     }
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
       setIsPanning(false)
       setDraggingNodeId(null)
+
+      // Knife tool completion: sever any intersecting edges!
+      if (knifeCut.active) {
+        const cutEdges = transactions.filter((tx) => {
+          const sNode = nodeMap.get(tx.source)
+          const tNode = nodeMap.get(tx.target)
+          if (!sNode || !tNode) return false
+          return knifeCutsEdge(knifeCut.startCanvas, knifeCut.endCanvas, sNode.position, tNode.position)
+        })
+
+        cutEdges.forEach((tx) => onDeleteTransaction(tx.id))
+        setKnifeCut({ active: false, startCanvas: { x: 0, y: 0 }, endCanvas: { x: 0, y: 0 } })
+      }
+
+      // If dragging a connection and released over empty canvas
+      if (connectingSourceId) {
+        if (hoveredTargetNodeId && hoveredTargetNodeId !== connectingSourceId) {
+          onRequestCreateTransaction(connectingSourceId, hoveredTargetNodeId)
+        }
+        setConnectingSourceId(null)
+        setHoveredTargetNodeId(null)
+      }
     }
 
     window.addEventListener('mousemove', handleMouseMove)
@@ -207,9 +391,23 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isPanning, draggingNodeId, connectingSourceId, zoom, screenToCanvas, onUpdateNodePosition])
+  }, [
+    isPanning,
+    draggingNodeId,
+    connectingSourceId,
+    hoveredTargetNodeId,
+    knifeCut,
+    zoom,
+    screenToCanvas,
+    onUpdateNodePosition,
+    nodes,
+    transactions,
+    nodeMap,
+    onRequestCreateTransaction,
+    onDeleteTransaction,
+  ])
 
-  // Keyboard shortcut listeners (Delete / Backspace / Escape)
+  // Global Blender Keyboard Shortcuts: Shift+A, X/Delete, Shift+D, Escape, A/Alt+A
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -220,19 +418,52 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         return
       }
 
-      if (e.key === 'Escape') {
-        setConnectingSourceId(null)
-        onSelectNode(null)
-        onSelectTransaction(null)
-        setShowAddMenu(false)
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      // Shift + A = Open Add Node Menu at mouse cursor
+      if (e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault()
+        const mouseX = lastMousePosRef.current.clientX
+        const mouseY = lastMousePosRef.current.clientY
+        const canvasPos = screenToCanvas(mouseX, mouseY)
+        setAddMenuState({
+          isOpen: true,
+          screenPos: { x: mouseX, y: mouseY },
+          canvasPos,
+        })
+        return
+      }
+
+      // Shift + D = Duplicate selected node
+      if (e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+        if (selectedNodeId && onDuplicateNode) {
+          e.preventDefault()
+          onDuplicateNode(selectedNodeId)
+          return
+        }
+      }
+
+      // X or Delete = Delete selected node or transaction
+      if (e.key === 'x' || e.key === 'X' || e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedNodeId) {
+          e.preventDefault()
           onDeleteNode(selectedNodeId)
           onSelectNode(null)
         } else if (selectedTransactionId) {
+          e.preventDefault()
           onDeleteTransaction(selectedTransactionId)
           onSelectTransaction(null)
         }
+        return
+      }
+
+      // Escape = Cancel wiring / dismiss menus / deselect
+      if (e.key === 'Escape') {
+        setConnectingSourceId(null)
+        setHoveredTargetNodeId(null)
+        setAddMenuState((prev) => ({ ...prev, isOpen: false }))
+        setKnifeCut({ active: false, startCanvas: { x: 0, y: 0 }, endCanvas: { x: 0, y: 0 } })
+        onSelectNode(null)
+        onSelectTransaction(null)
+        return
       }
     }
 
@@ -243,18 +474,39 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     selectedTransactionId,
     onDeleteNode,
     onDeleteTransaction,
+    onDuplicateNode,
     onSelectNode,
     onSelectTransaction,
+    screenToCanvas,
   ])
 
-  // Rubber-band line coords when connecting
+  // Live Cubic Bezier Rubber-Band Wire while connecting
   let rubberBandPath = ''
   if (connectingSourceId) {
     const srcNode = nodeMap.get(connectingSourceId)
     if (srcNode) {
       const srcX = srcNode.position.x + NODE_DIMENSIONS.width
       const srcY = srcNode.position.y + NODE_DIMENSIONS.height / 2
-      rubberBandPath = `M ${srcX} ${srcY} L ${mouseCanvasPos.x} ${mouseCanvasPos.y}`
+
+      let tgtX = mouseCanvasPos.x
+      let tgtY = mouseCanvasPos.y
+
+      // Snap to hovered target node input socket if hovering over one
+      if (hoveredTargetNodeId) {
+        const hNode = nodeMap.get(hoveredTargetNodeId)
+        if (hNode) {
+          tgtX = hNode.position.x
+          tgtY = hNode.position.y + NODE_DIMENSIONS.height / 2
+        }
+      }
+
+      const dx = Math.max(Math.abs(tgtX - srcX) * 0.55, 50)
+      const ctrl1X = srcX + dx
+      const ctrl1Y = srcY
+      const ctrl2X = tgtX - dx
+      const ctrl2Y = tgtY
+
+      rubberBandPath = `M ${srcX} ${srcY} C ${ctrl1X} ${ctrl1Y}, ${ctrl2X} ${ctrl2Y}, ${tgtX} ${tgtY}`
     }
   }
 
@@ -263,6 +515,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       ref={containerRef}
       className="graph-canvas-container"
       onMouseDown={handleCanvasMouseDown}
+      onContextMenu={handleContextMenu}
       onWheel={handleWheel}
       style={{
         position: 'relative',
@@ -270,7 +523,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         height: '100%',
         overflow: 'hidden',
         backgroundColor: '#090d16',
-        cursor: isPanning ? 'grabbing' : connectingSourceId ? 'crosshair' : 'default',
+        cursor: isPanning
+          ? 'grabbing'
+          : knifeCut.active
+          ? 'crosshair'
+          : connectingSourceId
+          ? 'crosshair'
+          : 'default',
         userSelect: 'none',
       }}
     >
@@ -287,7 +546,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
         }}
       >
-        {/* SVG Layer */}
+        {/* SVG Layer: Grid, Edges, Connecting Wire, Particles, Knife Line */}
         <svg
           style={{
             position: 'absolute',
@@ -320,7 +579,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             pointerEvents="none"
           />
 
-          {/* Directed Edges */}
+          {/* Directed Transaction Edges */}
           {transactions.map((tx) => {
             const srcNode = nodeMap.get(tx.source)
             const tgtNode = nodeMap.get(tx.target)
@@ -343,19 +602,62 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             )
           })}
 
-          {/* Active Connecting Rubber-Band Line */}
+          {/* Live Blender-Style Cubic Bezier Connecting Wire */}
           {connectingSourceId && rubberBandPath && (
-            <path
-              d={rubberBandPath}
-              stroke="#38bdf8"
-              strokeWidth={2}
-              strokeDasharray="4,4"
-              fill="none"
-              pointerEvents="none"
-            />
+            <g pointerEvents="none">
+              {/* Outer glow */}
+              <path
+                d={rubberBandPath}
+                stroke="#38bdf8"
+                strokeWidth={5}
+                strokeOpacity={0.3}
+                fill="none"
+              />
+              {/* Core wire */}
+              <path
+                d={rubberBandPath}
+                stroke="#38bdf8"
+                strokeWidth={2.5}
+                strokeDasharray={hoveredTargetNodeId ? undefined : '5,5'}
+                fill="none"
+              />
+              {/* Target socket snap circle */}
+              <circle
+                cx={hoveredTargetNodeId ? nodeMap.get(hoveredTargetNodeId)?.position.x : mouseCanvasPos.x}
+                cy={hoveredTargetNodeId ? (nodeMap.get(hoveredTargetNodeId)?.position.y ?? 0) + NODE_DIMENSIONS.height / 2 : mouseCanvasPos.y}
+                r={hoveredTargetNodeId ? 8 : 4}
+                fill={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
+              />
+            </g>
           )}
 
-          {/* Animated Particles */}
+          {/* Blender Knife Tool Laser Cutter Line */}
+          {knifeCut.active && (
+            <g pointerEvents="none">
+              <line
+                x1={knifeCut.startCanvas.x}
+                y1={knifeCut.startCanvas.y}
+                x2={knifeCut.endCanvas.x}
+                y2={knifeCut.endCanvas.y}
+                stroke="#f43f5e"
+                strokeWidth={4}
+                strokeOpacity={0.4}
+              />
+              <line
+                x1={knifeCut.startCanvas.x}
+                y1={knifeCut.startCanvas.y}
+                x2={knifeCut.endCanvas.x}
+                y2={knifeCut.endCanvas.y}
+                stroke="#ff4d4d"
+                strokeWidth={2}
+                strokeDasharray="4,2"
+              />
+              <circle cx={knifeCut.startCanvas.x} cy={knifeCut.startCanvas.y} r={3} fill="#ff4d4d" />
+              <circle cx={knifeCut.endCanvas.x} cy={knifeCut.endCanvas.y} r={3} fill="#ff4d4d" />
+            </g>
+          )}
+
+          {/* Animated Flow Particles */}
           <ParticleLayer
             events={recentEvents}
             currencies={currencies}
@@ -381,6 +683,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                 currencies={currencies}
                 selected={selectedNodeId === node.id}
                 isConnectingSource={connectingSourceId === node.id}
+                isPotentialTarget={connectingSourceId !== null && connectingSourceId !== node.id && hoveredTargetNodeId === node.id}
                 onSelect={() => {
                   onSelectNode(node.id)
                   onSelectTransaction(null)
@@ -416,180 +719,133 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           zIndex: 50,
         }}
       >
-        {/* Add Node Dropdown Button */}
-        <div style={{ position: 'relative' }}>
-          <button
-            title="Add Node"
-            onClick={() => setShowAddMenu(!showAddMenu)}
+        {/* Add Node Button (triggers Blender Add Node Menu) */}
+        <button
+          title="Add Node (Shift + A)"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            handleOpenAddMenu({ x: rect.left, y: rect.top - 360 })
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 10px',
+            backgroundColor: '#38bdf8',
+            color: '#0f172a',
+            fontWeight: 600,
+            fontSize: '12px',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+          }}
+        >
+          <Plus size={14} />
+          <span>Add Node</span>
+          <span
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 10px',
-              backgroundColor: '#38bdf8',
-              color: '#0f172a',
-              fontWeight: 600,
-              fontSize: '12px',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
+              fontSize: '9px',
+              backgroundColor: 'rgba(15, 23, 42, 0.25)',
+              padding: '1px 4px',
+              borderRadius: '3px',
             }}
           >
-            <Plus size={14} />
-            <span>Add Node</span>
-          </button>
-
-          {showAddMenu && (
-            <div
-              style={{
-                position: 'absolute',
-                left: 0,
-                bottom: '36px',
-                width: '160px',
-                backgroundColor: '#1e293b',
-                border: '1px solid #334155',
-                borderRadius: '6px',
-                padding: '4px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-                zIndex: 60,
-              }}
-            >
-              {[
-                { role: 'agent' as NodeRole, label: 'Agent', icon: UserCheck, color: '#38bdf8' },
-                { role: 'market' as NodeRole, label: 'Market / Exchange', icon: Building2, color: '#a78bfa' },
-                { role: 'bank' as NodeRole, label: 'Central Bank', icon: Landmark, color: '#fbbf24' },
-                { role: 'mint' as NodeRole, label: 'Mint / Source', icon: Coins, color: '#34d399' },
-                { role: 'sink' as NodeRole, label: 'Drain / Sink', icon: Flame, color: '#f87171' },
-              ].map((item) => (
-                <button
-                  key={item.role}
-                  onClick={() => {
-                    onAddNode(item.role, item.label)
-                    setShowAddMenu(false)
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '6px 8px',
-                    backgroundColor: 'transparent',
-                    color: '#f8fafc',
-                    fontSize: '12px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#334155')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                >
-                  <item.icon size={14} color={item.color} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            Shift+A
+          </span>
+        </button>
 
         <div style={{ width: '1px', height: '20px', backgroundColor: '#334155', margin: '0 2px' }} />
 
         {/* Zoom Controls */}
         <button
           title="Zoom In"
-          onClick={() => setZoom((z) => Math.min(z * 1.2, 2.5))}
+          onClick={() => setZoom((z) => Math.min(z * 1.15, 2.5))}
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             padding: '6px',
-            backgroundColor: '#1e293b',
+            backgroundColor: 'transparent',
             color: '#94a3b8',
             border: 'none',
-            borderRadius: '6px',
+            borderRadius: '4px',
             cursor: 'pointer',
-            display: 'flex',
           }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = '#f8fafc')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
         >
           <ZoomIn size={14} />
         </button>
-        <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace', minWidth: '38px', textAlign: 'center' }}>
-          {Math.round(zoom * 100)}%
-        </span>
+
         <button
           title="Zoom Out"
-          onClick={() => setZoom((z) => Math.max(z / 1.2, 0.35))}
+          onClick={() => setZoom((z) => Math.max(z / 1.15, 0.35))}
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             padding: '6px',
-            backgroundColor: '#1e293b',
+            backgroundColor: 'transparent',
             color: '#94a3b8',
             border: 'none',
-            borderRadius: '6px',
+            borderRadius: '4px',
             cursor: 'pointer',
-            display: 'flex',
           }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = '#f8fafc')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
         >
           <ZoomOut size={14} />
         </button>
+
         <button
-          title="Reset View"
+          title="Reset Zoom & Pan"
           onClick={() => {
             setZoom(1.0)
             setPan({ x: 40, y: 40 })
           }}
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             padding: '6px',
-            backgroundColor: '#1e293b',
+            backgroundColor: 'transparent',
             color: '#94a3b8',
             border: 'none',
-            borderRadius: '6px',
+            borderRadius: '4px',
             cursor: 'pointer',
-            display: 'flex',
           }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = '#f8fafc')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
         >
           <RotateCcw size={14} />
         </button>
-      </div>
 
-      {/* Connection Mode Banner */}
-      {connectingSourceId && (
+        <div style={{ width: '1px', height: '20px', backgroundColor: '#334155', margin: '0 2px' }} />
+
+        {/* Knife tool hint indicator */}
         <div
+          title="Knife Tool: Hold Ctrl and drag Right Mouse Button to cut wires"
           style={{
-            position: 'absolute',
-            top: '16px',
-            left: '50%',
-            transform: 'translateX(-50%)',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            padding: '8px 14px',
-            backgroundColor: '#0f172a',
-            border: '1px solid #38bdf8',
-            borderRadius: '20px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-            color: '#f8fafc',
-            fontSize: '12px',
-            fontWeight: 500,
-            zIndex: 60,
+            gap: '4px',
+            padding: '4px 6px',
+            fontSize: '10px',
+            color: '#64748b',
           }}
         >
-          <Unlink size={14} color="#38bdf8" />
-          <span>Click a target node to complete transaction connection</span>
-          <button
-            onClick={() => setConnectingSourceId(null)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              padding: '2px',
-              display: 'flex',
-              marginLeft: '4px',
-            }}
-          >
-            <X size={14} />
-          </button>
+          <Scissors size={12} />
+          <span>Ctrl+RMB Cut</span>
         </div>
-      )}
+      </div>
+
+      {/* Blender-style Add Node Search Menu */}
+      <AddNodeMenu
+        isOpen={addMenuState.isOpen}
+        screenPosition={addMenuState.screenPos}
+        onSelectRole={handleSelectRoleFromAddMenu}
+        onClose={() => setAddMenuState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   )
 }

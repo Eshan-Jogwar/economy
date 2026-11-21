@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   Play,
   Pause,
@@ -10,6 +10,9 @@ import {
   Download,
   Upload,
   Layers,
+  Keyboard,
+  FilePlus,
+  HelpCircle,
 } from 'lucide-react'
 import { Currency } from '../types/simulation'
 
@@ -34,10 +37,10 @@ interface ControlBarProps {
 }
 
 const PRESETS = [
+  { key: 'blank', label: 'Blank Canvas (Build from Scratch)' },
   { key: 'dual-currency', label: 'Dual Currency FX Bridge' },
   { key: 'circular-economy', label: 'Circular Economy with Bank & Sink' },
   { key: 'three-zone', label: 'Three-Zone Trade Network' },
-  { key: 'blank', label: 'Blank Canvas' },
 ]
 
 const SPEEDS = [
@@ -66,6 +69,7 @@ export const ControlBar: React.FC<ControlBarProps> = ({
   onExportJson,
   onImportJson,
 }) => {
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,6 +144,27 @@ export const ControlBar: React.FC<ControlBarProps> = ({
               </option>
             ))}
           </select>
+
+          {/* New / Clear Graph Button */}
+          <button
+            onClick={() => onSelectPreset('blank')}
+            title="Start New Blank Graph"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '5px 8px',
+              backgroundColor: activePresetName === 'blank' ? 'rgba(56, 189, 248, 0.2)' : '#1e293b',
+              border: activePresetName === 'blank' ? '1px solid #38bdf8' : '1px solid #334155',
+              borderRadius: '6px',
+              color: activePresetName === 'blank' ? '#38bdf8' : '#94a3b8',
+              fontSize: '11px',
+              cursor: 'pointer',
+            }}
+          >
+            <FilePlus size={13} />
+            <span>New Graph</span>
+          </button>
         </div>
       </div>
 
@@ -375,6 +400,105 @@ export const ControlBar: React.FC<ControlBarProps> = ({
         >
           <Upload size={14} />
         </button>
+
+        {/* Blender Graph Controls Guide */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowShortcuts(!showShortcuts)}
+            title="Blender Node Graph Shortcuts"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '6px 8px',
+              backgroundColor: showShortcuts ? '#38bdf822' : '#1e293b',
+              border: showShortcuts ? '1px solid #38bdf8' : '1px solid #334155',
+              borderRadius: '6px',
+              color: showShortcuts ? '#38bdf8' : '#94a3b8',
+              cursor: 'pointer',
+              fontSize: '11px',
+            }}
+          >
+            <Keyboard size={14} />
+            <span>Shortcuts</span>
+          </button>
+
+          {showShortcuts && (
+            <div
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: '36px',
+                width: '300px',
+                backgroundColor: '#0f172a',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                boxShadow: '0 12px 28px rgba(0,0,0,0.7)',
+                zIndex: 60,
+                color: '#f8fafc',
+                fontSize: '11px',
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  color: '#38bdf8',
+                  marginBottom: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span>Blender Node Controls</span>
+                <span style={{ fontSize: '10px', color: '#64748b' }}>UX Guide</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Add Node Menu</span>
+                  <kbd style={{ backgroundColor: '#1e293b', padding: '1px 5px', borderRadius: '4px', border: '1px solid #334155' }}>
+                    Shift + A
+                  </kbd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Connect Nodes</span>
+                  <span style={{ color: '#38bdf8' }}>Drag Output to Input</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Knife Cut Routes</span>
+                  <kbd style={{ backgroundColor: '#1e293b', padding: '1px 5px', borderRadius: '4px', border: '1px solid #334155' }}>
+                    Ctrl + RMB Drag
+                  </kbd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Delete Selected</span>
+                  <kbd style={{ backgroundColor: '#1e293b', padding: '1px 5px', borderRadius: '4px', border: '1px solid #334155' }}>
+                    X or Delete
+                  </kbd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Duplicate Node</span>
+                  <kbd style={{ backgroundColor: '#1e293b', padding: '1px 5px', borderRadius: '4px', border: '1px solid #334155' }}>
+                    Shift + D
+                  </kbd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Play / Pause</span>
+                  <kbd style={{ backgroundColor: '#1e293b', padding: '1px 5px', borderRadius: '4px', border: '1px solid #334155' }}>
+                    Space
+                  </kbd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Step 1 Tick</span>
+                  <kbd style={{ backgroundColor: '#1e293b', padding: '1px 5px', borderRadius: '4px', border: '1px solid #334155' }}>
+                    S
+                  </kbd>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )

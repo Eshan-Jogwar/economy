@@ -7,18 +7,23 @@ import {
   Currency,
   TransactionExecutionEvent,
   NodeRole,
+  TransactionAmountRule,
+  TransactionCondition,
 } from './types/simulation'
 import { executeTick } from './engine/simulationEngine'
 import {
   dualCurrencyFxBridge,
   circularEconomyWithBankAndSink,
   threeZoneTradeNetwork,
+  blankCanvas,
 } from './presets/initialPresets'
 import { ControlBar } from './components/ControlBar'
 import { GraphCanvas } from './components/GraphCanvas'
 import { NodeInspector } from './components/NodeInspector'
 import { EdgeInspector } from './components/EdgeInspector'
 import { CurrencyModal } from './components/CurrencyModal'
+import { CreateNodeModal } from './components/CreateNodeModal'
+import { CreateEdgeModal } from './components/CreateEdgeModal'
 import { MetricsDashboard } from './components/MetricsDashboard'
 import { TransactionLog } from './components/TransactionLog'
 
@@ -35,6 +40,17 @@ export function App() {
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false)
   const [isMetricsOpen, setIsMetricsOpen] = useState(false)
   const [isLogOpen, setIsLogOpen] = useState(false)
+
+  // Intercepting Creation Modals State
+  const [pendingNodeCreation, setPendingNodeCreation] = useState<{
+    role: NodeRole
+    position: { x: number; y: number }
+  } | null>(null)
+
+  const [pendingEdgeCreation, setPendingEdgeCreation] = useState<{
+    sourceId: string
+    targetId: string
+  } | null>(null)
 
   // Recent events for particle animations
   const [recentEvents, setRecentEvents] = useState<TransactionExecutionEvent[]>([])
@@ -64,7 +80,7 @@ export function App() {
     return () => clearInterval(interval)
   }, [state.isPlaying, state.speedMs, stepTick])
 
-  // Global Keyboard shortcuts
+  // Global Keyboard shortcuts (Space = Play/Pause, S = Step, M = Metrics, L = Log)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -109,26 +125,8 @@ export function App() {
     } else if (presetKey === 'three-zone') {
       setState(threeZoneTradeNetwork())
     } else {
-      // Blank canvas with standard reference currency
-      setState({
-        currencies: [
-          { id: 'CRD', name: 'Credit', symbol: '₡', color: '#38bdf8', decimals: 2, baseExchangeRate: 1.0 },
-        ],
-        nodes: [
-          {
-            id: 'node-1',
-            label: 'Prime Agent',
-            role: 'agent',
-            position: { x: 300, y: 250 },
-            balances: { CRD: 1000 },
-          },
-        ],
-        transactions: [],
-        tick: 0,
-        isPlaying: false,
-        speedMs: 600,
-        history: [],
-      })
+      // Blank canvas: completely empty graph for user-driven creation
+      setState(blankCanvas())
     }
   }
 
@@ -145,20 +143,17 @@ export function App() {
     }))
   }
 
-  // Add new node
-  const handleAddNode = (role: NodeRole, label: string) => {
-    const newId = `node_${Date.now().toString(36)}`
-    const defaultBalances: Record<string, number> = {}
-    state.currencies.forEach((c) => {
-      defaultBalances[c.id] = 100
-    })
+  // Request Node Creation: Intercept with CreateNodeModal
+  const handleRequestCreateNode = (role: NodeRole, position: { x: number; y: number }) => {
+    setPendingNodeCreation({ role, position })
+  }
 
+  // Confirm Node Creation from Modal
+  const handleConfirmCreateNode = (nodeData: Omit<SimulationNode, 'id'>) => {
+    const newId = `node_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`
     const newNode: SimulationNode = {
       id: newId,
-      label: `${label} ${state.nodes.length + 1}`,
-      role,
-      position: { x: 350 + Math.random() * 80 - 40, y: 250 + Math.random() * 80 - 40 },
-      balances: defaultBalances,
+      ...nodeData,
     }
 
     setState((prev) => ({
@@ -167,6 +162,17 @@ export function App() {
     }))
     setSelectedNodeId(newId)
     setSelectedTransactionId(null)
+    setPendingNodeCreation(null)
+  }
+
+  // Duplicate node (Shift + D)
+  const handleDuplicateNode = (nodeId: string) => {
+    const nodeToDup = state.nodes.find((n) => n.id === nodeId)
+    if (!nodeToDup) return
+    setPendingNodeCreation({
+      role: nodeToDup.role,
+      position: { x: nodeToDup.position.x + 40, y: nodeToDup.position.y + 40 },
+    })
   }
 
   // Delete node
@@ -191,8 +197,8 @@ export function App() {
     }))
   }
 
-  // Create new transaction (directed edge)
-  const handleCreateTransaction = (sourceId: string, targetId: string) => {
+  // Request Transaction Creation: Intercept with CreateEdgeModal
+  const handleRequestCreateTransaction = (sourceId: string, targetId: string) => {
     if (sourceId === targetId) return
 
     // Avoid duplicate parallel transaction with exact same endpoints
@@ -204,18 +210,27 @@ export function App() {
       return
     }
 
-    const defaultCurrency = state.currencies[0]?.id || 'CRD'
+    setPendingEdgeCreation({ sourceId, targetId })
+  }
+
+  // Confirm Transaction Creation from Modal
+  const handleConfirmCreateTransaction = (txData: {
+    sourceCurrencyId: string
+    targetCurrencyId: string
+    exchangeRate: number
+    amountRule: TransactionAmountRule
+    condition: TransactionCondition
+    active: boolean
+    label?: string
+  }) => {
+    if (!pendingEdgeCreation) return
+
+    const newId = `tx_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`
     const newTx: SimulationTransaction = {
-      id: `tx_${Date.now().toString(36)}`,
-      source: sourceId,
-      target: targetId,
-      sourceCurrencyId: defaultCurrency,
-      targetCurrencyId: defaultCurrency,
-      exchangeRate: 1.0,
-      amountRule: { type: 'fixed', value: 25 },
-      condition: { type: 'always' },
-      active: true,
-      label: 'Transfer',
+      id: newId,
+      source: pendingEdgeCreation.sourceId,
+      target: pendingEdgeCreation.targetId,
+      ...txData,
     }
 
     setState((prev) => ({
@@ -224,6 +239,7 @@ export function App() {
     }))
     setSelectedTransactionId(newTx.id)
     setSelectedNodeId(null)
+    setPendingEdgeCreation(null)
   }
 
   // Update transaction properties
@@ -249,10 +265,20 @@ export function App() {
 
   // Add currency
   const handleAddCurrency = (currency: Currency) => {
-    setState((prev) => ({
-      ...prev,
-      currencies: [...prev.currencies, currency],
-    }))
+    setState((prev) => {
+      const updatedNodes = prev.nodes.map((n) => ({
+        ...n,
+        balances: {
+          ...n.balances,
+          [currency.id]: 0,
+        },
+      }))
+      return {
+        ...prev,
+        currencies: [...prev.currencies, currency],
+        nodes: updatedNodes,
+      }
+    })
   }
 
   // Update currency
@@ -267,40 +293,58 @@ export function App() {
 
   // Delete currency
   const handleDeleteCurrency = (currencyId: string) => {
-    setState((prev) => ({
-      ...prev,
-      currencies: prev.currencies.filter((c) => c.id !== currencyId),
-    }))
+    setState((prev) => {
+      const updatedCurrencies = prev.currencies.filter((c) => c.id !== currencyId)
+      const updatedNodes = prev.nodes.map((node) => {
+        const newBalances = { ...node.balances }
+        delete newBalances[currencyId]
+        let newRule = node.rule
+        if (node.rule && node.rule.currencyId === currencyId) {
+          newRule = undefined
+        }
+        return {
+          ...node,
+          balances: newBalances,
+          rule: newRule,
+        }
+      })
+      const updatedTransactions = prev.transactions.filter(
+        (tx) => tx.sourceCurrencyId !== currencyId && tx.targetCurrencyId !== currencyId
+      )
+      return {
+        ...prev,
+        currencies: updatedCurrencies,
+        nodes: updatedNodes,
+        transactions: updatedTransactions,
+      }
+    })
   }
 
-  // Export Simulation JSON
+  // Export state to JSON file
   const handleExportJson = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2))
     const downloadAnchor = document.createElement('a')
     downloadAnchor.setAttribute('href', dataStr)
-    downloadAnchor.setAttribute('download', `money-simulation-${Date.now()}.json`)
+    downloadAnchor.setAttribute('download', `economy_simulation_tick_${state.tick}.json`)
     document.body.appendChild(downloadAnchor)
     downloadAnchor.click()
     downloadAnchor.remove()
   }
 
-  // Import Simulation JSON
+  // Import state from JSON file
   const handleImportJson = (file: File) => {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const parsed = JSON.parse(e.target?.result as string) as SimulationState
-        if (parsed.currencies && parsed.nodes && parsed.transactions) {
-          setState({
-            ...parsed,
-            isPlaying: false,
-          })
+        const json = JSON.parse(e.target?.result as string)
+        if (json && Array.isArray(json.nodes) && Array.isArray(json.transactions)) {
+          setState(json)
           setSelectedNodeId(null)
           setSelectedTransactionId(null)
           setRecentEvents([])
           setEventHistory([])
         } else {
-          alert('Invalid simulation file structure.')
+          alert('Invalid simulation file format.')
         }
       } catch (err) {
         alert('Failed to parse JSON file.')
@@ -309,13 +353,19 @@ export function App() {
     reader.readAsText(file)
   }
 
-  const selectedNode = state.nodes.find((n) => n.id === selectedNodeId) || null
-  const selectedTransaction =
-    state.transactions.find((tx) => tx.id === selectedTransactionId) || null
+  const selectedNode = state.nodes.find((n) => n.id === selectedNodeId)
+  const selectedTransaction = state.transactions.find((tx) => tx.id === selectedTransactionId)
+
+  const pendingSourceNode = pendingEdgeCreation
+    ? state.nodes.find((n) => n.id === pendingEdgeCreation.sourceId) || null
+    : null
+  const pendingTargetNode = pendingEdgeCreation
+    ? state.nodes.find((n) => n.id === pendingEdgeCreation.targetId) || null
+    : null
 
   return (
     <div
-      className="app-container"
+      className="economy-app-root"
       style={{
         width: '100vw',
         height: '100vh',
@@ -371,9 +421,10 @@ export function App() {
             onSelectNode={setSelectedNodeId}
             onSelectTransaction={setSelectedTransactionId}
             onUpdateNodePosition={handleUpdateNodePosition}
-            onAddNode={handleAddNode}
+            onRequestCreateNode={handleRequestCreateNode}
             onDeleteNode={handleDeleteNode}
-            onCreateTransaction={handleCreateTransaction}
+            onDuplicateNode={handleDuplicateNode}
+            onRequestCreateTransaction={handleRequestCreateTransaction}
             onDeleteTransaction={handleDeleteTransaction}
           />
         </div>
@@ -429,6 +480,31 @@ export function App() {
         onUpdateCurrency={handleUpdateCurrency}
         onDeleteCurrency={handleDeleteCurrency}
       />
+
+      {/* Intercepted Node Creation Modal */}
+      {pendingNodeCreation && (
+        <CreateNodeModal
+          isOpen={true}
+          initialRole={pendingNodeCreation.role}
+          canvasPosition={pendingNodeCreation.position}
+          currencies={state.currencies}
+          existingNodeCount={state.nodes.length}
+          onConfirm={handleConfirmCreateNode}
+          onCancel={() => setPendingNodeCreation(null)}
+        />
+      )}
+
+      {/* Intercepted Edge / Connection Creation Modal */}
+      {pendingEdgeCreation && pendingSourceNode && pendingTargetNode && (
+        <CreateEdgeModal
+          isOpen={true}
+          sourceNode={pendingSourceNode}
+          targetNode={pendingTargetNode}
+          currencies={state.currencies}
+          onConfirm={handleConfirmCreateTransaction}
+          onCancel={() => setPendingEdgeCreation(null)}
+        />
+      )}
     </div>
   )
 }

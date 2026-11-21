@@ -26,22 +26,24 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
   const strokeColor = sourceCurrency?.color || '#94a3b8'
   const isMultiCurrency = transaction.sourceCurrencyId !== transaction.targetCurrencyId
 
-  // Node centers
-  const srcCenterX = sourceNode.position.x + nodeDimensions.width / 2
-  const srcCenterY = sourceNode.position.y + nodeDimensions.height / 2
-  const tgtCenterX = targetNode.position.x + nodeDimensions.width / 2
-  const tgtCenterY = targetNode.position.y + nodeDimensions.height / 2
+  // Sockets: source right edge to target left edge
+  const srcX = sourceNode.position.x + nodeDimensions.width
+  const srcY = sourceNode.position.y + nodeDimensions.height / 2
+  const tgtX = targetNode.position.x
+  const tgtY = targetNode.position.y + nodeDimensions.height / 2
 
-  const dx = tgtCenterX - srcCenterX
-  const dy = tgtCenterY - srcCenterY
-  const dist = Math.sqrt(dx * dx + dy * dy) || 1
+  // Blender-style cubic Bezier curve control points
+  const dx = Math.max(Math.abs(tgtX - srcX) * 0.55, 60)
+  const ctrl1X = srcX + dx
+  const ctrl1Y = srcY
+  const ctrl2X = tgtX - dx
+  const ctrl2Y = tgtY
 
-  // Offset control point for organic curvature
-  const midX = (srcCenterX + tgtCenterX) / 2
-  const midY = (srcCenterY + tgtCenterY) / 2
-  const curveOffset = Math.min(60, dist * 0.18)
-  const ctrlX = midX - (dy / dist) * curveOffset
-  const ctrlY = midY + (dx / dist) * curveOffset
+  const pathData = `M ${srcX} ${srcY} C ${ctrl1X} ${ctrl1Y}, ${ctrl2X} ${ctrl2Y}, ${tgtX} ${tgtY}`
+
+  // Center badge position at t = 0.5
+  const badgeX = 0.125 * srcX + 0.375 * ctrl1X + 0.375 * ctrl2X + 0.125 * tgtX
+  const badgeY = 0.125 * srcY + 0.375 * ctrl1Y + 0.375 * ctrl2Y + 0.125 * tgtY
 
   let transferRuleText = ''
   if (transaction.amountRule.type === 'fixed') {
@@ -49,11 +51,6 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
   } else {
     transferRuleText = `${transaction.amountRule.value}% ${sourceCurrency?.symbol || transaction.sourceCurrencyId}`
   }
-
-  const pathData = `M ${srcCenterX} ${srcCenterY} Q ${ctrlX} ${ctrlY} ${tgtCenterX} ${tgtCenterY}`
-
-  const badgeX = 0.25 * srcCenterX + 0.5 * ctrlX + 0.25 * tgtCenterX
-  const badgeY = 0.25 * srcCenterY + 0.5 * ctrlY + 0.25 * tgtCenterY
 
   const markerId = `arrow-${transaction.id}`
 
@@ -80,7 +77,7 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
         </marker>
       </defs>
 
-      {/* Invisible wider stroke for easy click */}
+      {/* Invisible wider stroke for easy click selection */}
       <path
         d={pathData}
         fill="none"
@@ -101,53 +98,58 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
         />
       )}
 
-      {/* Visible directed edge line */}
+      {/* Active Directed Edge Wire */}
       <path
         d={pathData}
         fill="none"
         stroke={selected ? '#38bdf8' : strokeColor}
         strokeWidth={selected ? 2.5 : 2}
-        strokeOpacity={transaction.active ? 0.85 : 0.3}
-        strokeDasharray={transaction.active ? undefined : '5,5'}
+        strokeDasharray={transaction.active ? undefined : '6,4'}
+        strokeOpacity={transaction.active ? 0.9 : 0.4}
         markerEnd={`url(#${markerId})`}
-        style={{ transition: 'stroke 0.2s, stroke-width 0.2s' }}
+        strokeLinecap="round"
       />
 
-      {/* Edge information badge at midpoint */}
-      <g transform={`translate(${badgeX}, ${badgeY})`}>
+      {/* Midpoint Label Badge */}
+      <g
+        transform={`translate(${badgeX}, ${badgeY})`}
+        style={{ pointerEvents: 'none' }}
+      >
         <rect
-          x={-60}
-          y={-14}
-          width={120}
-          height={28}
-          rx={6}
-          fill={selected ? '#0f172a' : '#1e293b'}
+          x="-50"
+          y="-13"
+          width="100"
+          height="26"
+          rx="5"
+          fill="#0f172a"
           stroke={selected ? '#38bdf8' : '#334155'}
-          strokeWidth={1.5}
+          strokeWidth="1"
+          style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))' }}
         />
         <text
-          x={0}
-          y={-1}
+          x="0"
+          y="-1"
+          fill="#f8fafc"
+          fontSize="9"
+          fontWeight="600"
           textAnchor="middle"
           dominantBaseline="middle"
-          fill="#f1f5f9"
-          fontSize="11"
-          fontWeight="600"
-          fontFamily="system-ui, sans-serif"
+          fontFamily="monospace"
         >
           {transferRuleText}
         </text>
         {isMultiCurrency && (
           <text
-            x={0}
-            y={8}
+            x="0"
+            y="7"
+            fill={targetCurrency?.color || '#a78bfa'}
+            fontSize="8"
+            fontWeight="500"
             textAnchor="middle"
             dominantBaseline="middle"
-            fill={targetCurrency?.color || '#94a3b8'}
-            fontSize="9"
             fontFamily="monospace"
           >
-            {`fx ×${transaction.exchangeRate} ${targetCurrency?.symbol || transaction.targetCurrencyId}`}
+            ×{transaction.exchangeRate} {targetCurrency?.symbol || transaction.targetCurrencyId}
           </text>
         )}
       </g>

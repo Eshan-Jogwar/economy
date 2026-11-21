@@ -5,7 +5,6 @@ import {
   UserCheck,
   Coins,
   Flame,
-  ArrowRightCircle,
   PlusCircle,
   MinusCircle,
   GripHorizontal,
@@ -17,8 +16,9 @@ interface NodeViewProps {
   currencies: Currency[]
   selected?: boolean
   isConnectingSource?: boolean
+  isPotentialTarget?: boolean
   onSelect: () => void
-  onStartConnect: (nodeId: string) => void
+  onStartConnect: (e: React.MouseEvent, nodeId: string) => void
   onCompleteConnect?: (nodeId: string) => void
   onDragStart: (e: React.MouseEvent, nodeId: string) => void
 }
@@ -43,6 +43,7 @@ export const NodeView: React.FC<NodeViewProps> = ({
   currencies,
   selected = false,
   isConnectingSource = false,
+  isPotentialTarget = false,
   onSelect,
   onStartConnect,
   onCompleteConnect,
@@ -64,7 +65,8 @@ export const NodeView: React.FC<NodeViewProps> = ({
     <div
       className={`node-card ${selected ? 'node-selected' : ''} ${
         isConnectingSource ? 'node-connecting-source' : ''
-      }`}
+      } ${isPotentialTarget ? 'node-potential-target' : ''}`}
+      data-node-id={node.id}
       style={{
         position: 'absolute',
         left: `${node.position.x}px`,
@@ -72,14 +74,22 @@ export const NodeView: React.FC<NodeViewProps> = ({
         width: '220px',
         minHeight: '120px',
         backgroundColor: '#0f172a',
-        border: selected ? '2px solid #38bdf8' : '1px solid #334155',
+        border: selected
+          ? '2px solid #38bdf8'
+          : isPotentialTarget
+          ? '2px dashed #34d399'
+          : isConnectingSource
+          ? '2px solid #f59e0b'
+          : '1px solid #334155',
         borderRadius: '8px',
         boxShadow: selected
           ? '0 0 0 3px rgba(56, 189, 248, 0.25), 0 8px 16px rgba(0,0,0,0.5)'
+          : isPotentialTarget
+          ? '0 0 0 3px rgba(52, 211, 153, 0.3), 0 8px 16px rgba(0,0,0,0.5)'
           : '0 4px 12px rgba(0,0,0,0.3)',
         color: '#f8fafc',
         userSelect: 'none',
-        zIndex: selected ? 20 : 10,
+        zIndex: selected || isPotentialTarget ? 25 : 10,
         transition: 'border-color 0.15s, box-shadow 0.15s',
       }}
       onClick={(e) => {
@@ -90,7 +100,59 @@ export const NodeView: React.FC<NodeViewProps> = ({
           onSelect()
         }
       }}
+      onMouseUp={() => {
+        if (onCompleteConnect) {
+          onCompleteConnect(node.id)
+        }
+      }}
     >
+      {/* Blender-style Input Socket (Left Side - Target Receiver) */}
+      <div
+        className="blender-socket blender-socket-input"
+        title="Input Socket: Drop wire here to connect"
+        onClick={(e) => {
+          e.stopPropagation()
+          if (onCompleteConnect) {
+            onCompleteConnect(node.id)
+          }
+        }}
+        onMouseUp={(e) => {
+          e.stopPropagation()
+          if (onCompleteConnect) {
+            onCompleteConnect(node.id)
+          }
+        }}
+        style={{
+          position: 'absolute',
+          left: '-9px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: '18px',
+          height: '18px',
+          borderRadius: '50%',
+          backgroundColor: isPotentialTarget ? '#34d399' : '#0f172a',
+          border: isPotentialTarget ? '2px solid #ffffff' : '2px solid #94a3b8',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: onCompleteConnect ? 'pointer' : 'default',
+          zIndex: 30,
+          boxShadow: isPotentialTarget
+            ? '0 0 8px #34d399, inset 0 0 4px #34d399'
+            : '0 2px 4px rgba(0,0,0,0.6)',
+          transition: 'all 0.15s ease',
+        }}
+      >
+        <div
+          style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            backgroundColor: isPotentialTarget ? '#ffffff' : '#64748b',
+          }}
+        />
+      </div>
+
       {/* Node Header */}
       <div
         className="node-header"
@@ -101,7 +163,7 @@ export const NodeView: React.FC<NodeViewProps> = ({
           justifyContent: 'space-between',
           padding: '8px 10px',
           borderBottom: '1px solid #1e293b',
-          backgroundColor: '#1e293b',
+          backgroundColor: isConnectingSource ? 'rgba(245, 158, 11, 0.15)' : '#1e293b',
           borderTopLeftRadius: '6px',
           borderTopRightRadius: '6px',
           cursor: 'grab',
@@ -230,35 +292,48 @@ export const NodeView: React.FC<NodeViewProps> = ({
         )}
       </div>
 
-      {/* Connect Port Button */}
-      <button
-        title="Connect to another node (click here, then click target node)"
+      {/* Blender-style Output Socket (Right Side - Source Sender) */}
+      <div
+        className="blender-socket blender-socket-output"
+        title="Output Socket: Drag wire to connect to another node"
+        onMouseDown={(e) => {
+          e.stopPropagation()
+          onStartConnect(e, node.id)
+        }}
         onClick={(e) => {
           e.stopPropagation()
-          onStartConnect(node.id)
+          onStartConnect(e, node.id)
         }}
         style={{
           position: 'absolute',
-          right: '-10px',
+          right: '-9px',
           top: '50%',
           transform: 'translateY(-50%)',
-          width: '20px',
-          height: '20px',
+          width: '18px',
+          height: '18px',
           borderRadius: '50%',
-          backgroundColor: isConnectingSource ? '#38bdf8' : '#1e293b',
-          border: '2px solid #38bdf8',
+          backgroundColor: isConnectingSource ? '#38bdf8' : '#0f172a',
+          border: isConnectingSource ? '2px solid #ffffff' : '2px solid #38bdf8',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'crosshair',
-          padding: 0,
-          color: '#ffffff',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
-          transition: 'transform 0.15s, background-color 0.15s',
+          zIndex: 30,
+          boxShadow: isConnectingSource
+            ? '0 0 10px #38bdf8, inset 0 0 4px #38bdf8'
+            : '0 2px 4px rgba(0,0,0,0.6)',
+          transition: 'all 0.15s ease',
         }}
       >
-        <ArrowRightCircle size={12} color={isConnectingSource ? '#0f172a' : '#38bdf8'} />
-      </button>
+        <div
+          style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            backgroundColor: isConnectingSource ? '#ffffff' : '#38bdf8',
+          }}
+        />
+      </div>
     </div>
   )
 }

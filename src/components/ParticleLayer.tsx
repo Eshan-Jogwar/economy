@@ -48,9 +48,10 @@ export const ParticleLayer: React.FC<ParticleLayerProps> = ({
       const srcCur = currencies.find((c) => c.id === ev.sourceCurrencyId)
       const tgtCur = currencies.find((c) => c.id === ev.targetCurrencyId)
 
-      const sourceX = srcPos.x + nodeWidth / 2
+      // Start at source output socket, end at target input socket
+      const sourceX = srcPos.x + nodeWidth
       const sourceY = srcPos.y + nodeHeight / 2
-      const targetX = tgtPos.x + nodeWidth / 2
+      const targetX = tgtPos.x
       const targetY = tgtPos.y + nodeHeight / 2
 
       newParticles.push({
@@ -109,19 +110,24 @@ export const ParticleLayer: React.FC<ParticleLayerProps> = ({
   return (
     <g className="particle-layer" pointerEvents="none">
       {particles.map((p) => {
-        const midX = (p.sourceX + p.targetX) / 2
-        const midY = (p.sourceY + p.targetY) / 2
-        const dx = p.targetX - p.sourceX
-        const dy = p.targetY - p.sourceY
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1
-        const offset = Math.min(60, dist * 0.18)
-        const ctrlX = midX - (dy / dist) * offset
-        const ctrlY = midY + (dx / dist) * offset
+        const dx = Math.max(Math.abs(p.targetX - p.sourceX) * 0.55, 60)
+        const ctrl1X = p.sourceX + dx
+        const ctrl1Y = p.sourceY
+        const ctrl2X = p.targetX - dx
+        const ctrl2Y = p.targetY
 
         const t = p.progress
         const invT = 1 - t
-        const curX = invT * invT * p.sourceX + 2 * invT * t * ctrlX + t * t * p.targetX
-        const curY = invT * invT * p.sourceY + 2 * invT * t * ctrlY + t * t * p.targetY
+        const curX =
+          invT * invT * invT * p.sourceX +
+          3 * invT * invT * t * ctrl1X +
+          3 * invT * t * t * ctrl2X +
+          t * t * t * p.targetX
+        const curY =
+          invT * invT * invT * p.sourceY +
+          3 * invT * invT * t * ctrl1Y +
+          3 * invT * t * t * ctrl2Y +
+          t * t * t * p.targetY
 
         const currentColor = t < 0.5 ? p.sourceColor : p.targetColor
         const currentSymbol = t < 0.5 ? p.sourceSymbol : p.targetSymbol

@@ -231,3 +231,21 @@ export const threeZoneTradeNetwork = (): SimulationState => ({
   speedMs: 100,
   history: [],
 })
+
+/**
+ * Preset 4: Blank Canvas
+ * Clean slate with standard currencies so users can build their own custom economic graph.
+ */
+export const blankCanvas = (): SimulationState => ({
+  currencies: [
+    { id: 'CRD', name: 'Credit', symbol: '₡', color: '#38bdf8', decimals: 2, baseExchangeRate: 1.0 },
+    { id: 'AUR', name: 'Aurum', symbol: '₲', color: '#fbbf24', decimals: 2, baseExchangeRate: 1.0 },
+    { id: 'SLV', name: 'Silver', symbol: '☉', color: '#94a3b8', decimals: 2, baseExchangeRate: 1.0 },
+  ],
+  nodes: [],
+  transactions: [],
+  tick: 0,
+  isPlaying: false,
+  speedMs: 300,
+  history: [],
+})
