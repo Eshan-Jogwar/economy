@@ -98,6 +98,19 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Activity size={16} color="#38bdf8" />
           <span style={{ fontSize: '13px', fontWeight: 600 }}>Economic Analytics & Supply Trends</span>
+          <span
+            style={{
+              fontSize: '11px',
+              color: '#10b981',
+              fontWeight: 600,
+              padding: '2px 8px',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              borderRadius: '4px',
+            }}
+          >
+            Total Wealth: ${totalSystemWealth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+          </span>
         </div>
         <button
           onClick={onClose}
@@ -162,8 +175,8 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({
                         {cur.name} ({cur.symbol})
                       </span>
                     </div>
-                    <span style={{ fontSize: '10px', color: '#64748b' }}>
-                      Base: {cur.baseExchangeRate}x
+                    <span style={{ fontSize: '10px', color: cur.isDefault ? '#10b981' : '#94a3b8', fontFamily: 'monospace' }}>
+                      1 {cur.symbol} = ${cur.baseExchangeRate.toFixed(2)} USD
                     </span>
                   </div>
 
@@ -216,7 +229,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
                     <span style={{ fontWeight: 500, color: '#e2e8f0' }}>{nw.label}</span>
                     <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>
-                      {nw.wealth.toFixed(1)} standard ({percent}%)
+                      ${nw.wealth.toFixed(2)} USD ({percent}%)
                     </span>
                   </div>
                   <div style={{ width: '100%', height: '4px', backgroundColor: '#0f172a', borderRadius: '2px', overflow: 'hidden' }}>

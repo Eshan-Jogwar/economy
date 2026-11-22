@@ -6,12 +6,14 @@ import {
   ArrowRightLeft,
   Percent,
   Hash,
+  Sparkles,
 } from 'lucide-react'
 import {
   SimulationTransaction,
   SimulationNode,
   Currency,
 } from '../types/simulation'
+import { calculateTransitiveRate } from '../utils/currency'
 
 interface EdgeInspectorProps {
   transaction: SimulationTransaction | null
@@ -278,6 +280,82 @@ export const EdgeInspector: React.FC<EdgeInspectorProps> = ({
             <div style={{ fontSize: '10px', color: '#64748b' }}>
               1 {transaction.sourceCurrencyId} = {transaction.exchangeRate} {transaction.targetCurrencyId}
             </div>
+
+            {/* Transitive relation card */}
+            {isCrossCurrency && (() => {
+              const triangulatedRate = calculateTransitiveRate(
+                transaction.sourceCurrencyId,
+                transaction.targetCurrencyId,
+                currencies
+              )
+              const isPegged = Math.abs(transaction.exchangeRate - triangulatedRate) < 0.0001
+              const sourceCur = currencies.find((c) => c.id === transaction.sourceCurrencyId)
+              const targetCur = currencies.find((c) => c.id === transaction.targetCurrencyId)
+
+              return (
+                <div
+                  style={{
+                    marginTop: '8px',
+                    padding: '8px',
+                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Sparkles size={11} color="#10b981" />
+                      <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>
+                        USD Transitive Pivot:
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                        backgroundColor: isPegged ? '#10b981' : '#f59e0b',
+                        color: '#0f172a',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {isPegged ? '✓ Matched USD Pivot' : 'Custom Markup'}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+                    1 {sourceCur?.symbol} (${sourceCur?.baseExchangeRate?.toFixed(2)} USD) ➔ 1 {targetCur?.symbol} (${targetCur?.baseExchangeRate?.toFixed(2)} USD) ={' '}
+                    <span style={{ color: '#6ee7b7', fontWeight: 600 }}>
+                      {triangulatedRate.toFixed(4)}
+                    </span>
+                  </div>
+
+                  {!isPegged && (
+                    <button
+                      type="button"
+                      onClick={() => handleExchangeRateChange(parseFloat(triangulatedRate.toFixed(4)))}
+                      style={{
+                        marginTop: '4px',
+                        padding: '4px 8px',
+                        backgroundColor: '#0f172a',
+                        border: '1px solid #10b981',
+                        borderRadius: '4px',
+                        color: '#10b981',
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        alignSelf: 'flex-start',
+                      }}
+                    >
+                      Sync to USD Transitive Rate ({triangulatedRate.toFixed(4)})
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         </div>
 

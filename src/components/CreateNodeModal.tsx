@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   X,
+  CircleDot,
   UserCheck,
   Building2,
   Landmark,
@@ -35,14 +36,23 @@ const ROLE_PRESETS: Record<
     defaultBalance: number
   }
 > = {
-  agent: {
-    name: 'Agent / Household',
-    defaultLabel: 'Household',
-    icon: UserCheck,
+  generic: {
+    name: 'Generic Node / Junction',
+    defaultLabel: 'Node',
+    icon: CircleDot,
     color: '#38bdf8',
-    description: 'An individual or household economic actor holding and transferring funds.',
+    description: 'A universal economic node capable of holding and transferring funds across transactions.',
     defaultRule: { type: 'none', currencyId: '', amount: 0 },
     defaultBalance: 100,
+  },
+  bank: {
+    name: 'Central Bank / Reserve',
+    defaultLabel: 'Reserve Bank',
+    icon: Landmark,
+    color: '#fbbf24',
+    description: 'Holds reserves and acts as a financial liquidity anchor.',
+    defaultRule: { type: 'none', currencyId: '', amount: 0 },
+    defaultBalance: 1000,
   },
   market: {
     name: 'Market / Exchange Hub',
@@ -53,14 +63,14 @@ const ROLE_PRESETS: Record<
     defaultRule: { type: 'none', currencyId: '', amount: 0 },
     defaultBalance: 250,
   },
-  bank: {
-    name: 'Central Bank / Reserve',
-    defaultLabel: 'Reserve Bank',
-    icon: Landmark,
-    color: '#fbbf24',
-    description: 'Holds reserves and acts as a financial liquidity anchor.',
+  agent: {
+    name: 'Agent / Household',
+    defaultLabel: 'Household',
+    icon: UserCheck,
+    color: '#06b6d4',
+    description: 'An individual or household economic actor holding and transferring funds.',
     defaultRule: { type: 'none', currencyId: '', amount: 0 },
-    defaultBalance: 1000,
+    defaultBalance: 100,
   },
   mint: {
     name: 'Mint / Wealth Generator',
@@ -101,7 +111,7 @@ export const CreateNodeModal: React.FC<CreateNodeModalProps> = ({
   // Sync state whenever modal opens or role changes
   useEffect(() => {
     if (!isOpen) return
-    const config = ROLE_PRESETS[initialRole] || ROLE_PRESETS.agent
+    const config = ROLE_PRESETS[initialRole] || ROLE_PRESETS.generic
     setRole(initialRole)
     setLabel(`${config.defaultLabel} ${existingNodeCount + 1}`)
 
@@ -181,7 +191,18 @@ export const CreateNodeModal: React.FC<CreateNodeModalProps> = ({
         zIndex: 1000,
         padding: '16px',
       }}
-      onClick={onCancel}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          e.stopPropagation()
+          onCancel()
+        }
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          e.stopPropagation()
+          onCancel()
+        }
+      }}
     >
       <div
         className="modal-container"
@@ -198,6 +219,7 @@ export const CreateNodeModal: React.FC<CreateNodeModalProps> = ({
           maxHeight: '90vh',
           overflow: 'hidden',
         }}
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -283,8 +305,8 @@ export const CreateNodeModal: React.FC<CreateNodeModalProps> = ({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(5, 1fr)',
-                gap: '6px',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '8px',
               }}
             >
               {(Object.keys(ROLE_PRESETS) as NodeRole[]).map((r) => {
@@ -295,6 +317,7 @@ export const CreateNodeModal: React.FC<CreateNodeModalProps> = ({
                   <button
                     key={r}
                     type="button"
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={() => handleRoleChange(r)}
                     style={{
                       display: 'flex',
@@ -313,24 +336,24 @@ export const CreateNodeModal: React.FC<CreateNodeModalProps> = ({
                     }}
                   >
                     <Icon size={16} color={conf.color} />
-                    <span style={{ textTransform: 'capitalize' }}>{r}</span>
+                    <span style={{ textTransform: 'capitalize' }}>{conf.defaultLabel}</span>
                   </button>
                 )
               })}
             </div>
             <div
               style={{
-                marginTop: '6px',
+                marginTop: '8px',
                 fontSize: '11px',
-                color: '#64748b',
-                fontStyle: 'italic',
+                color: '#94a3b8',
                 backgroundColor: '#090d16',
-                padding: '6px 10px',
+                padding: '8px 12px',
                 borderRadius: '6px',
                 border: '1px solid #1e293b',
+                lineHeight: 1.4,
               }}
             >
-              {currentConfig.description}
+              <span style={{ color: '#38bdf8', fontWeight: 600 }}>💡 Generic Node:</span> {currentConfig.description}
             </div>
           </div>
 

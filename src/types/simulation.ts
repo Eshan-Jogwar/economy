@@ -5,9 +5,10 @@ export type Currency = {
   color: string
   decimals: number
   baseExchangeRate: number
+  isDefault?: boolean
 }
 
-export type NodeRole = 'agent' | 'market' | 'bank' | 'mint' | 'sink'
+export type NodeRole = 'generic' | 'agent' | 'market' | 'bank' | 'mint' | 'sink'
 
 export type NodeRule = {
   type: 'none' | 'mint' | 'drain'
@@ -49,6 +50,7 @@ export type SimulationTransaction = {
 
 export type SimulationState = {
   currencies: Currency[]
+  defaultCurrencyId?: string
   nodes: SimulationNode[]
   transactions: SimulationTransaction[]
   tick: number
