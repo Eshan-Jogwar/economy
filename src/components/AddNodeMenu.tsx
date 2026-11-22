@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
   Search,
+  CircleDot,
   UserCheck,
   Building2,
   Landmark,
@@ -30,22 +31,13 @@ interface RoleOption {
 
 const ROLE_OPTIONS: RoleOption[] = [
   {
-    role: 'agent',
-    name: 'Agent / Household',
-    subtitle: 'Standard economic actor',
-    icon: UserCheck,
+    role: 'generic',
+    name: 'Generic Node',
+    subtitle: 'Holds money & routes transfers',
+    icon: CircleDot,
     color: '#38bdf8',
     numberKey: '1',
-    description: 'Holds balances and sends/receives currency via transactions.',
-  },
-  {
-    role: 'market',
-    name: 'Market / Exchange Hub',
-    subtitle: 'Liquidity & FX conversion',
-    icon: Building2,
-    color: '#a78bfa',
-    numberKey: '2',
-    description: 'Facilitates inter-currency trade and FX rate conversions.',
+    description: 'Universal node entity capable of holding currency balances and acting as an economic junction.',
   },
   {
     role: 'bank',
@@ -53,8 +45,26 @@ const ROLE_OPTIONS: RoleOption[] = [
     subtitle: 'Reserve & monetary anchor',
     icon: Landmark,
     color: '#fbbf24',
-    numberKey: '3',
+    numberKey: '2',
     description: 'Maintains reserves and acts as financial liquidity center.',
+  },
+  {
+    role: 'market',
+    name: 'Market / Exchange Hub',
+    subtitle: 'Liquidity & FX conversion',
+    icon: Building2,
+    color: '#a78bfa',
+    numberKey: '3',
+    description: 'Facilitates inter-currency trade and FX rate conversions.',
+  },
+  {
+    role: 'agent',
+    name: 'Agent / Household',
+    subtitle: 'Standard economic actor',
+    icon: UserCheck,
+    color: '#06b6d4',
+    numberKey: '4',
+    description: 'Holds balances and sends/receives currency via transactions.',
   },
   {
     role: 'mint',
@@ -62,7 +72,7 @@ const ROLE_OPTIONS: RoleOption[] = [
     subtitle: 'Autonomous wealth injector',
     icon: Coins,
     color: '#34d399',
-    numberKey: '4',
+    numberKey: '5',
     description: 'Generates new currency supply each tick (+/tick).',
   },
   {
@@ -71,7 +81,7 @@ const ROLE_OPTIONS: RoleOption[] = [
     subtitle: 'Autonomous drain / tax sink',
     icon: Flame,
     color: '#f87171',
-    numberKey: '5',
+    numberKey: '6',
     description: 'Permanently absorbs and drains currency supply (-/tick).',
   },
 ]
@@ -132,7 +142,7 @@ export const AddNodeMenu: React.FC<AddNodeMenuProps> = ({
         if (filteredOptions[selectedIndex]) {
           onSelectRole(filteredOptions[selectedIndex].role)
         }
-      } else if (['1', '2', '3', '4', '5'].includes(e.key) && !search) {
+      } else if (['1', '2', '3', '4', '5', '6'].includes(e.key) && !search) {
         const option = ROLE_OPTIONS.find((o) => o.numberKey === e.key)
         if (option) {
           e.preventDefault()
@@ -149,7 +159,7 @@ export const AddNodeMenu: React.FC<AddNodeMenuProps> = ({
 
   // Clamp popup position to viewport
   const menuWidth = 280
-  const menuHeight = 360
+  const menuHeight = 400
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
 
@@ -166,9 +176,17 @@ export const AddNodeMenu: React.FC<AddNodeMenuProps> = ({
           zIndex: 998,
           cursor: 'default',
         }}
-        onClick={onClose}
+        onMouseDown={(e) => {
+          e.stopPropagation()
+          onClose()
+        }}
+        onClick={(e) => {
+          e.stopPropagation()
+          onClose()
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
+          e.stopPropagation()
           onClose()
         }}
       />
@@ -176,6 +194,7 @@ export const AddNodeMenu: React.FC<AddNodeMenuProps> = ({
       {/* Floating Blender-style Search Menu */}
       <div
         ref={containerRef}
+        className="add-node-menu"
         style={{
           position: 'fixed',
           left: `${clampedX}px`,
@@ -192,6 +211,8 @@ export const AddNodeMenu: React.FC<AddNodeMenuProps> = ({
           flexDirection: 'column',
           animation: 'fadeIn 0.1s ease-out',
         }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with Blender shortcut badge */}
@@ -258,9 +279,10 @@ export const AddNodeMenu: React.FC<AddNodeMenuProps> = ({
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search nodes... (1-5)"
+            placeholder="Search nodes... (1-6)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onMouseDown={(e) => e.stopPropagation()}
             style={{
               flex: 1,
               backgroundColor: 'transparent',
@@ -276,12 +298,13 @@ export const AddNodeMenu: React.FC<AddNodeMenuProps> = ({
         <div
           style={{
             padding: '4px',
-            maxHeight: '260px',
+            maxHeight: '290px',
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
             gap: '2px',
           }}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           {filteredOptions.length === 0 ? (
             <div
@@ -303,7 +326,13 @@ export const AddNodeMenu: React.FC<AddNodeMenuProps> = ({
                 <button
                   key={opt.role}
                   type="button"
-                  onClick={() => onSelectRole(opt.role)}
+                  onMouseDown={(e) => {
+                    e.stopPropagation()
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSelectRole(opt.role)
+                  }}
                   onMouseEnter={() => setSelectedIndex(idx)}
                   style={{
                     display: 'flex',

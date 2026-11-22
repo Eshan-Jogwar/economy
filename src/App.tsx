@@ -320,6 +320,18 @@ export function App() {
     })
   }
 
+  // Set default / base currency anchor
+  const handleSetDefaultCurrency = (currencyId: string) => {
+    setState((prev) => ({
+      ...prev,
+      defaultCurrencyId: currencyId,
+      currencies: prev.currencies.map((c) => ({
+        ...c,
+        isDefault: c.id === currencyId,
+      })),
+    }))
+  }
+
   // Export state to JSON file
   const handleExportJson = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2))
@@ -479,6 +491,8 @@ export function App() {
         onAddCurrency={handleAddCurrency}
         onUpdateCurrency={handleUpdateCurrency}
         onDeleteCurrency={handleDeleteCurrency}
+        defaultCurrencyId={state.defaultCurrencyId || 'USD'}
+        onSetDefaultCurrency={handleSetDefaultCurrency}
       />
 
       {/* Intercepted Node Creation Modal */}

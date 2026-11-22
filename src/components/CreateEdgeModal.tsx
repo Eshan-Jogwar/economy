@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
+  Sparkles,
 } from 'lucide-react'
 import {
   SimulationNode,
@@ -15,6 +16,7 @@ import {
   TransactionAmountRule,
   TransactionCondition,
 } from '../types/simulation'
+import { calculateTransitiveRate } from '../utils/currency'
 
 interface CreateEdgeModalProps {
   isOpen: boolean
@@ -78,6 +80,21 @@ export const CreateEdgeModal: React.FC<CreateEdgeModalProps> = ({
   const sourceCurrency = currencies.find((c) => c.id === sourceCurrencyId)
   const targetCurrency = currencies.find((c) => c.id === targetCurrencyId)
   const isFxConversion = sourceCurrencyId !== targetCurrencyId
+
+  const triangulatedRate = calculateTransitiveRate(sourceCurrencyId, targetCurrencyId, currencies)
+  const isPeggedToUSD = Math.abs(exchangeRate - triangulatedRate) < 0.0001
+
+  const handleSourceCurrencyChange = (newSrc: string) => {
+    setSourceCurrencyId(newSrc)
+    const newRate = calculateTransitiveRate(newSrc, targetCurrencyId, currencies)
+    setExchangeRate(parseFloat(newRate.toFixed(4)))
+  }
+
+  const handleTargetCurrencyChange = (newTgt: string) => {
+    setTargetCurrencyId(newTgt)
+    const newRate = calculateTransitiveRate(sourceCurrencyId, newTgt, currencies)
+    setExchangeRate(parseFloat(newRate.toFixed(4)))
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -287,7 +304,7 @@ export const CreateEdgeModal: React.FC<CreateEdgeModalProps> = ({
                 </label>
                 <select
                   value={sourceCurrencyId}
-                  onChange={(e) => setSourceCurrencyId(e.target.value)}
+                  onChange={(e) => handleSourceCurrencyChange(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '6px 8px',
@@ -318,7 +335,7 @@ export const CreateEdgeModal: React.FC<CreateEdgeModalProps> = ({
                 </label>
                 <select
                   value={targetCurrencyId}
-                  onChange={(e) => setTargetCurrencyId(e.target.value)}
+                  onChange={(e) => handleTargetCurrencyChange(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '6px 8px',
@@ -339,6 +356,51 @@ export const CreateEdgeModal: React.FC<CreateEdgeModalProps> = ({
                 </select>
               </div>
             </div>
+
+            {/* Transitive FX Derivation Card via Dollar */}
+            {isFxConversion && (
+              <div
+                style={{
+                  marginTop: '8px',
+                  padding: '8px 12px',
+                  backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={12} color="#10b981" />
+                    <span style={{ fontSize: '10px', fontWeight: 600, color: '#10b981' }}>
+                      Transitive Pivot via Dollar ($ USD)
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      padding: '1px 5px',
+                      borderRadius: '4px',
+                      backgroundColor: isPeggedToUSD ? '#10b981' : '#f59e0b',
+                      color: '#0f172a',
+                    }}
+                  >
+                    {isPeggedToUSD ? '✓ Pegged to USD Pivot' : 'Custom Spread'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+                  1 {sourceCurrency?.symbol} (${sourceCurrency?.baseExchangeRate?.toFixed(2)} USD) ➔{' '}
+                  1 {targetCurrency?.symbol} (${targetCurrency?.baseExchangeRate?.toFixed(2)} USD)
+                  {' = '}
+                  <span style={{ color: '#6ee7b7', fontWeight: 600 }}>
+                    {triangulatedRate.toFixed(4)} {targetCurrency?.symbol}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Exchange Rate Multiplier (shows if differing currencies or customized) */}
             <div
@@ -381,6 +443,25 @@ export const CreateEdgeModal: React.FC<CreateEdgeModalProps> = ({
                     outline: 'none',
                   }}
                 />
+                {isFxConversion && !isPeggedToUSD && (
+                  <button
+                    type="button"
+                    onClick={() => setExchangeRate(parseFloat(triangulatedRate.toFixed(4)))}
+                    title="Reset to exact USD transitive rate"
+                    style={{
+                      padding: '3px 6px',
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #10b981',
+                      borderRadius: '4px',
+                      color: '#10b981',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Reset to USD Rate
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -2,6 +2,7 @@ import React from 'react'
 import {
   X,
   Trash2,
+  CircleDot,
   Building2,
   Landmark,
   UserCheck,
@@ -22,9 +23,10 @@ interface NodeInspectorProps {
 }
 
 const ROLES: { role: NodeRole; label: string; icon: React.FC<any>; color: string }[] = [
-  { role: 'agent', label: 'Agent', icon: UserCheck, color: '#38bdf8' },
-  { role: 'market', label: 'Market / Exchange', icon: Building2, color: '#a78bfa' },
+  { role: 'generic', label: 'Generic Node', icon: CircleDot, color: '#38bdf8' },
   { role: 'bank', label: 'Bank', icon: Landmark, color: '#fbbf24' },
+  { role: 'market', label: 'Market / Exchange', icon: Building2, color: '#a78bfa' },
+  { role: 'agent', label: 'Agent', icon: UserCheck, color: '#06b6d4' },
   { role: 'mint', label: 'Mint / Source', icon: Coins, color: '#34d399' },
   { role: 'sink', label: 'Drain / Sink', icon: Flame, color: '#f87171' },
 ]

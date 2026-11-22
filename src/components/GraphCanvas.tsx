@@ -220,6 +220,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
     // Normal Left Click or Middle Click = Canvas Pan & Deselect
     if (e.button === 0 || e.button === 1) {
+      if (addMenuState.isOpen) {
+        setAddMenuState((prev) => ({ ...prev, isOpen: false }))
+        return
+      }
       setIsPanning(true)
       panStartRef.current = {
         x: e.clientX,
@@ -232,7 +236,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       if (connectingSourceId) {
         setConnectingSourceId(null)
       }
-      setAddMenuState((prev) => ({ ...prev, isOpen: false }))
     }
   }
 

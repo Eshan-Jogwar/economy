@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  CircleDot,
   Building2,
   Landmark,
   UserCheck,
@@ -25,8 +26,10 @@ interface NodeViewProps {
 
 const getRoleConfig = (role: NodeRole) => {
   switch (role) {
+    case 'generic':
+      return { label: 'Node', icon: CircleDot, color: '#38bdf8' }
     case 'agent':
-      return { label: 'Agent', icon: UserCheck, color: '#38bdf8' }
+      return { label: 'Agent', icon: UserCheck, color: '#06b6d4' }
     case 'market':
       return { label: 'Market', icon: Building2, color: '#a78bfa' }
     case 'bank':
@@ -35,6 +38,8 @@ const getRoleConfig = (role: NodeRole) => {
       return { label: 'Mint', icon: Coins, color: '#34d399' }
     case 'sink':
       return { label: 'Sink', icon: Flame, color: '#f87171' }
+    default:
+      return { label: 'Node', icon: CircleDot, color: '#38bdf8' }
   }
 }
 

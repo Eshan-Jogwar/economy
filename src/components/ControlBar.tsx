@@ -291,26 +291,27 @@ export const ControlBar: React.FC<ControlBarProps> = ({
         {/* Currencies Button */}
         <button
           onClick={onOpenCurrenciesModal}
+          title="Open Currency Registry & Transitive FX Triangulation"
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             padding: '6px 10px',
             backgroundColor: '#1e293b',
-            border: '1px solid #334155',
+            border: '1px solid #10b98155',
             borderRadius: '6px',
             color: '#f8fafc',
             fontSize: '12px',
             cursor: 'pointer',
           }}
         >
-          <Coins size={14} color="#eab308" />
-          <span>Currencies</span>
+          <Coins size={14} color="#10b981" />
+          <span>Currencies ($ Base)</span>
           <span
             style={{
               padding: '1px 5px',
-              backgroundColor: '#eab30822',
-              color: '#eab308',
+              backgroundColor: 'rgba(16, 185, 129, 0.2)',
+              color: '#10b981',
               borderRadius: '10px',
               fontSize: '10px',
               fontWeight: 700,

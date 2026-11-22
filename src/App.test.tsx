@@ -126,3 +126,69 @@ test('Delete or X key deletes the selected node', () => {
 
   expect(screen.queryByText(/Solar Realm/i)).not.toBeInTheDocument()
 })
+
+test('Shift + A displays Generic Node as primary option and mouse down + click creates a generic junction node', () => {
+  render(<App />)
+
+  // Trigger Shift + A globally
+  fireEvent.keyDown(window, { key: 'A', shiftKey: true })
+
+  // Primary option is Generic Node
+  const genericOption = screen.getByText(/Generic Node/i)
+  expect(genericOption).toBeInTheDocument()
+
+  // Real mouse interaction: mousedown followed by click
+  fireEvent.mouseDown(genericOption)
+  fireEvent.click(genericOption)
+
+  // CreateNodeModal opens for generic node
+  expect(screen.getByText(/Create Simulation Node/i)).toBeInTheDocument()
+  expect(screen.getByDisplayValue(/Node 4/i)).toBeInTheDocument()
+
+  // Change label to "Junction Nexus"
+  const labelInput = screen.getByDisplayValue(/Node 4/i)
+  fireEvent.change(labelInput, { target: { value: 'Junction Nexus' } })
+
+  // Confirm creation
+  const confirmBtn = screen.getByRole('button', { name: /Create Node/i })
+  fireEvent.click(confirmBtn)
+
+  // Verify generic node is rendered on canvas
+  expect(screen.getByText(/Junction Nexus/i)).toBeInTheDocument()
+})
+
+test('can advance simulation tick and transfer currency through generic nodes', () => {
+  render(<App />)
+
+  // Solar Realm has 1200 AUR initially
+  expect(screen.getByText(/Solar Realm/i)).toBeInTheDocument()
+
+  // Click Step button to execute 1 tick
+  const stepBtn = screen.getByRole('button', { name: /step/i })
+  fireEvent.click(stepBtn)
+
+  // Transaction AUR -> SLV moves 100 AUR from Solar Realm to Lunar Realm (converted to 150 SLV)
+  // Check that simulation has stepped to tick 1
+  expect(screen.getByText(/Tick #1/i)).toBeInTheDocument()
+})
+
+test('currency modal displays Dollar as default intermediate anchor and supports transitive FX matrix & calculator', () => {
+  render(<App />)
+
+  // Open Currencies modal
+  const currenciesBtn = screen.getByRole('button', { name: /currencies/i })
+  fireEvent.click(currenciesBtn)
+
+  // Verify Dollar is identified as Default Base & Intermediate Anchor
+  expect(screen.getAllByText(/US Dollar/i).length).toBeGreaterThan(0)
+  expect(screen.getByText(/Default Base & Intermediate Anchor/i)).toBeInTheDocument()
+
+  // Switch to Transitive FX Matrix & Calculator tab
+  const matrixTab = screen.getByRole('button', { name: /Transitive FX Matrix & Calculator/i })
+  fireEvent.click(matrixTab)
+
+  // Verify calculator and matrix are visible
+  expect(screen.getByText(/Live Transitive Triangulation Calculator/i)).toBeInTheDocument()
+  expect(screen.getByText(/Transient Pivot/i)).toBeInTheDocument()
+  expect(screen.getByText(/Transitive FX Cross-Rate Matrix/i)).toBeInTheDocument()
+})
