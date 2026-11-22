@@ -13,6 +13,8 @@ import {
   Keyboard,
   FilePlus,
   HelpCircle,
+  Eye,
+  ChevronDown,
 } from 'lucide-react'
 import { Currency } from '../types/simulation'
 
@@ -24,6 +26,8 @@ interface ControlBarProps {
   activePresetName: string
   isMetricsOpen: boolean
   isLogOpen: boolean
+  viewCurrencyId?: string
+  onSelectViewCurrency?: (currencyId: string) => void
   onTogglePlay: () => void
   onStepTick: () => void
   onReset: () => void
@@ -58,6 +62,8 @@ export const ControlBar: React.FC<ControlBarProps> = ({
   activePresetName,
   isMetricsOpen,
   isLogOpen,
+  viewCurrencyId = 'native',
+  onSelectViewCurrency,
   onTogglePlay,
   onStepTick,
   onReset,
@@ -70,6 +76,7 @@ export const ControlBar: React.FC<ControlBarProps> = ({
   onImportJson,
 }) => {
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -288,6 +295,141 @@ export const ControlBar: React.FC<ControlBarProps> = ({
 
       {/* Utility Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Global View Currency Toggle */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: '6px',
+            padding: '2px',
+            gap: '2px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '0 4px', fontSize: '10px', color: '#94a3b8' }}>
+            <Eye size={12} color="#38bdf8" />
+            <span>View:</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onSelectViewCurrency?.('native')
+              setIsViewDropdownOpen(false)
+            }}
+            title="View money in each node's assigned currency wrapper"
+            style={{
+              padding: '3px 7px',
+              fontSize: '10px',
+              fontWeight: 600,
+              border: 'none',
+              borderRadius: '4px',
+              backgroundColor: viewCurrencyId === 'native' ? '#38bdf8' : 'transparent',
+              color: viewCurrencyId === 'native' ? '#0f172a' : '#94a3b8',
+              cursor: 'pointer',
+            }}
+          >
+            Native
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onSelectViewCurrency?.('USD')
+              setIsViewDropdownOpen(false)
+            }}
+            title="View all money unified in US Dollar ($ USD)"
+            style={{
+              padding: '3px 7px',
+              fontSize: '10px',
+              fontWeight: 600,
+              border: 'none',
+              borderRadius: '4px',
+              backgroundColor: viewCurrencyId === 'USD' ? '#10b981' : 'transparent',
+              color: viewCurrencyId === 'USD' ? '#064e3b' : '#94a3b8',
+              cursor: 'pointer',
+            }}
+          >
+            $ USD
+          </button>
+          {currencies.filter((c) => c.id !== 'USD').length > 0 && (
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setIsViewDropdownOpen((prev) => !prev)}
+                title="Select another currency wrapper to view all money"
+                style={{
+                  padding: '3px 7px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  border: 'none',
+                  borderRadius: '4px',
+                  backgroundColor: viewCurrencyId !== 'native' && viewCurrencyId !== 'USD' ? '#a78bfa' : 'transparent',
+                  color: viewCurrencyId !== 'native' && viewCurrencyId !== 'USD' ? '#0f172a' : '#94a3b8',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                <span>
+                  {viewCurrencyId !== 'native' && viewCurrencyId !== 'USD' ? viewCurrencyId : 'More...'}
+                </span>
+                <ChevronDown size={10} />
+              </button>
+
+              {isViewDropdownOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: '4px',
+                    backgroundColor: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '6px',
+                    boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
+                    zIndex: 60,
+                    minWidth: '130px',
+                    padding: '4px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px',
+                  }}
+                >
+                  {currencies.filter((c) => c.id !== 'USD').map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        onSelectViewCurrency?.(c.id)
+                        setIsViewDropdownOpen(false)
+                      }}
+                      style={{
+                        padding: '5px 8px',
+                        fontSize: '11px',
+                        textAlign: 'left',
+                        backgroundColor: viewCurrencyId === c.id ? `${c.color}22` : 'transparent',
+                        color: viewCurrencyId === c.id ? c.color : '#f8fafc',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <span>{c.name}</span>
+                      <span style={{ fontFamily: 'monospace', color: c.color, fontWeight: 700 }}>
+                        {c.symbol}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Currencies Button */}
         <button
           onClick={onOpenCurrenciesModal}

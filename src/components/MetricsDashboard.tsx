@@ -2,6 +2,7 @@ import React from 'react'
 import { X, Activity, PieChart, Wallet } from 'lucide-react'
 import { SimulationNode, Currency, TickSnapshot } from '../types/simulation'
 import { calculateTotalSupply, calculateVelocity } from '../engine/simulationEngine'
+import { getBaseExchangeRate } from '../utils/currency'
 
 interface MetricsDashboardProps {
   isOpen: boolean
@@ -60,7 +61,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({
     let normalizedWealth = 0
     for (const [curId, amount] of Object.entries(node.balances)) {
       const cur = currencies.find((c) => c.id === curId)
-      normalizedWealth += (amount || 0) * (cur?.baseExchangeRate || 1.0)
+      normalizedWealth += (amount || 0) * getBaseExchangeRate(cur)
     }
     return { id: node.id, label: node.label, role: node.role, wealth: normalizedWealth }
   }).sort((a, b) => b.wealth - a.wealth)

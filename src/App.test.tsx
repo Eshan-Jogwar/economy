@@ -56,8 +56,7 @@ test('clicking Add Node button opens the Blender Add Node Menu', () => {
 
   // Should display the Blender-style Add Node popup
   expect(screen.getByPlaceholderText(/Search nodes/i)).toBeInTheDocument()
-  expect(screen.getByText(/Agent \/ Household/i)).toBeInTheDocument()
-  expect(screen.getByText(/Central Bank/i)).toBeInTheDocument()
+  expect(screen.getByText(/Holds money & routes transfers/i)).toBeInTheDocument()
 })
 
 test('Shift + A opens the Blender Add Node Menu and allows creating a configured node via modal', () => {
@@ -68,24 +67,24 @@ test('Shift + A opens the Blender Add Node Menu and allows creating a configured
 
   expect(screen.getByPlaceholderText(/Search nodes/i)).toBeInTheDocument()
 
-  // Select "Central Bank" from menu
-  const bankOption = screen.getByText(/Central Bank/i)
-  fireEvent.click(bankOption)
+  // Select "Node" from menu
+  const nodeOption = screen.getByText(/Holds money & routes transfers/i)
+  fireEvent.click(nodeOption)
 
   // The CreateNodeModal must open to set initial data
   expect(screen.getByText(/Create Simulation Node/i)).toBeInTheDocument()
-  expect(screen.getByDisplayValue(/Reserve Bank/i)).toBeInTheDocument()
+  expect(screen.getByDisplayValue(/Node 4/i)).toBeInTheDocument()
 
-  // Change label to "Neo Bank Reserve"
-  const labelInput = screen.getByDisplayValue(/Reserve Bank/i)
-  fireEvent.change(labelInput, { target: { value: 'Neo Bank Reserve' } })
+  // Change label to "Neo Trading Node"
+  const labelInput = screen.getByDisplayValue(/Node 4/i)
+  fireEvent.change(labelInput, { target: { value: 'Neo Trading Node' } })
 
   // Click "Create Node" button
   const confirmBtn = screen.getByRole('button', { name: /Create Node/i })
   fireEvent.click(confirmBtn)
 
   // Newly created node should now exist on the canvas!
-  expect(screen.getByText(/Neo Bank Reserve/i)).toBeInTheDocument()
+  expect(screen.getByText(/Neo Trading Node/i)).toBeInTheDocument()
 })
 
 test('connecting nodes opens CreateEdgeModal to configure transaction before committing', () => {
@@ -127,21 +126,21 @@ test('Delete or X key deletes the selected node', () => {
   expect(screen.queryByText(/Solar Realm/i)).not.toBeInTheDocument()
 })
 
-test('Shift + A displays Generic Node as primary option and mouse down + click creates a generic junction node', () => {
+test('Shift + A displays Node as primary option and mouse down + click creates a node', () => {
   render(<App />)
 
   // Trigger Shift + A globally
   fireEvent.keyDown(window, { key: 'A', shiftKey: true })
 
-  // Primary option is Generic Node
-  const genericOption = screen.getByText(/Generic Node/i)
-  expect(genericOption).toBeInTheDocument()
+  // Primary option is Node
+  const nodeOption = screen.getByText(/Holds money & routes transfers/i)
+  expect(nodeOption).toBeInTheDocument()
 
   // Real mouse interaction: mousedown followed by click
-  fireEvent.mouseDown(genericOption)
-  fireEvent.click(genericOption)
+  fireEvent.mouseDown(nodeOption)
+  fireEvent.click(nodeOption)
 
-  // CreateNodeModal opens for generic node
+  // CreateNodeModal opens for node
   expect(screen.getByText(/Create Simulation Node/i)).toBeInTheDocument()
   expect(screen.getByDisplayValue(/Node 4/i)).toBeInTheDocument()
 
@@ -153,7 +152,7 @@ test('Shift + A displays Generic Node as primary option and mouse down + click c
   const confirmBtn = screen.getByRole('button', { name: /Create Node/i })
   fireEvent.click(confirmBtn)
 
-  // Verify generic node is rendered on canvas
+  // Verify node is rendered on canvas
   expect(screen.getByText(/Junction Nexus/i)).toBeInTheDocument()
 })
 
@@ -191,4 +190,77 @@ test('currency modal displays Dollar as default intermediate anchor and supports
   expect(screen.getByText(/Live Transitive Triangulation Calculator/i)).toBeInTheDocument()
   expect(screen.getByText(/Transient Pivot/i)).toBeInTheDocument()
   expect(screen.getByText(/Transitive FX Cross-Rate Matrix/i)).toBeInTheDocument()
+})
+
+test('can create a new currency asking for conversion factor x to US Dollar', () => {
+  render(<App />)
+
+  // Open Currencies modal
+  const currenciesBtn = screen.getByRole('button', { name: /currencies/i })
+  fireEvent.click(currenciesBtn)
+
+  expect(screen.getByText(/Create Custom Currency Wrapper/i)).toBeInTheDocument()
+
+  // Input Name: "Indian Rupee"
+  const nameInput = screen.getByPlaceholderText(/e.g. Indian Rupee, Solar Credit/i)
+  fireEvent.change(nameInput, { target: { value: 'Indian Rupee' } })
+
+  // Input Symbol: "₹"
+  const symbolInput = screen.getByPlaceholderText(/e.g. ₹, INR, ₡/i)
+  fireEvent.change(symbolInput, { target: { value: '₹' } })
+
+  // Input Conversion factor x to US Dollar: 83
+  const factorInput = screen.getByPlaceholderText(/e.g. 83 for INR, 150 for JPY/i)
+  fireEvent.change(factorInput, { target: { value: '83' } })
+
+  // Verify formula live preview shows x = 83
+  expect(screen.getByText(/Formula: ₹ \* x = \$1\.00 USD/i)).toBeInTheDocument()
+  expect(screen.getByText(/x = 83/i)).toBeInTheDocument()
+
+  // Click Add Currency button
+  const addBtn = screen.getByRole('button', { name: /Add Currency/i })
+  fireEvent.click(addBtn)
+
+  // Newly configured currency should now appear in the list with its conversion formula
+  expect(screen.getByText(/Indian Rupee/i)).toBeInTheDocument()
+  expect(screen.getByText(/₹ \* 83\.00 = \$1\.00 USD/i)).toBeInTheDocument()
+})
+
+test('displays unified money holding on node with dollar value and allows global view toggle', () => {
+  render(<App />)
+
+  // Solar Realm has 1200 AUR (1 AUR = $1.50 USD => $1,800 USD)
+  expect(screen.getByText(/Solar Realm/i)).toBeInTheDocument()
+  expect(screen.getByText(/1,200\.00 ₲/i)).toBeInTheDocument()
+  expect(screen.getByText(/\$1,800\.00 USD/i)).toBeInTheDocument()
+
+  // ControlBar has View Money selector: Click "$ USD" button to view all nodes in US Dollars
+  const usdViewBtn = screen.getByRole('button', { name: /\$ USD/i })
+  fireEvent.click(usdViewBtn)
+
+  // In USD view, Solar Realm displays its money converted directly to US Dollars
+  expect(screen.getByText(/1,800\.00 \$/i)).toBeInTheDocument()
+
+  // Click Native button to switch back to native currency wrapper
+  const nativeViewBtn = screen.getByRole('button', { name: /Native/i })
+  fireEvent.click(nativeViewBtn)
+
+  expect(screen.getByText(/1,200\.00 ₲/i)).toBeInTheDocument()
+})
+
+test('node inspector allows inspecting unified balance and viewing value in other currencies', () => {
+  render(<App />)
+
+  // Click on Solar Realm node header to open inspector
+  const solarNode = screen.getByText(/Solar Realm/i)
+  fireEvent.click(solarNode)
+
+  // Node Inspector opens
+  expect(screen.getByText(/Node Inspector/i)).toBeInTheDocument()
+  expect(screen.getByText(/Unified Money Balance/i)).toBeInTheDocument()
+  expect(screen.getByText(/View Value in Other Currencies/i)).toBeInTheDocument()
+
+  // Shows Aurum wrapper and US Dollar value
+  expect(screen.getByDisplayValue('1200')).toBeInTheDocument()
+  expect(screen.getByDisplayValue('1800')).toBeInTheDocument()
 })

@@ -1,16 +1,22 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   CircleDot,
-  Building2,
-  Landmark,
-  UserCheck,
   Coins,
   Flame,
   PlusCircle,
   MinusCircle,
   GripHorizontal,
+  DollarSign,
+  ArrowRightLeft,
 } from 'lucide-react'
-import { SimulationNode, Currency, NodeRole } from '../types/simulation'
+import { SimulationNode, Currency } from '../types/simulation'
+import {
+  getNodeCurrencyId,
+  getNodeBalance,
+  getNodeUsdValue,
+  DEFAULT_BASE_CURRENCY,
+  getUnitsPerDollar,
+} from '../utils/currency'
 
 interface NodeViewProps {
   node: SimulationNode
@@ -18,29 +24,11 @@ interface NodeViewProps {
   selected?: boolean
   isConnectingSource?: boolean
   isPotentialTarget?: boolean
+  viewCurrencyId?: string
   onSelect: () => void
   onStartConnect: (e: React.MouseEvent, nodeId: string) => void
   onCompleteConnect?: (nodeId: string) => void
   onDragStart: (e: React.MouseEvent, nodeId: string) => void
-}
-
-const getRoleConfig = (role: NodeRole) => {
-  switch (role) {
-    case 'generic':
-      return { label: 'Node', icon: CircleDot, color: '#38bdf8' }
-    case 'agent':
-      return { label: 'Agent', icon: UserCheck, color: '#06b6d4' }
-    case 'market':
-      return { label: 'Market', icon: Building2, color: '#a78bfa' }
-    case 'bank':
-      return { label: 'Bank', icon: Landmark, color: '#fbbf24' }
-    case 'mint':
-      return { label: 'Mint', icon: Coins, color: '#34d399' }
-    case 'sink':
-      return { label: 'Sink', icon: Flame, color: '#f87171' }
-    default:
-      return { label: 'Node', icon: CircleDot, color: '#38bdf8' }
-  }
 }
 
 export const NodeView: React.FC<NodeViewProps> = ({
@@ -49,22 +37,37 @@ export const NodeView: React.FC<NodeViewProps> = ({
   selected = false,
   isConnectingSource = false,
   isPotentialTarget = false,
+  viewCurrencyId = 'native',
   onSelect,
   onStartConnect,
   onCompleteConnect,
   onDragStart,
 }) => {
-  const roleConfig = getRoleConfig(node.role)
-  const RoleIcon = roleConfig.icon
 
-  // Currency lookup map
-  const currencyMap = new Map<string, Currency>()
-  currencies.forEach((c) => currencyMap.set(c.id, c))
+  // Local state to toggle between native currency wrapper and USD display on click
+  const [showUsdPrimary, setShowUsdPrimary] = useState(false)
 
-  // Determine non-zero or tracked currencies
-  const balanceEntries = Object.entries(node.balances)
-    .filter(([_, bal]) => bal !== 0 || currencies.length <= 3)
-    .slice(0, 4)
+  // Primary currency wrapper for this node
+  const nativeCurId = getNodeCurrencyId(node, currencies)
+  const nativeCurrency =
+    currencies.find((c) => c.id === nativeCurId) ||
+    currencies[0] ||
+    DEFAULT_BASE_CURRENCY
+
+  // Compute total money values
+  const totalUsdValue = getNodeUsdValue(node, currencies)
+  const nativeBalance = getNodeBalance(node, nativeCurId, currencies)
+
+  // Active view currency (if global view mode is set)
+  const effectiveViewCurId =
+    viewCurrencyId !== 'native' && viewCurrencyId ? viewCurrencyId : (showUsdPrimary ? 'USD' : nativeCurId)
+  const displayCurrency =
+    currencies.find((c) => c.id === effectiveViewCurId) || nativeCurrency
+  const displayBalance = getNodeBalance(node, effectiveViewCurId, currencies)
+
+  const isNative = effectiveViewCurId === nativeCurId
+  const nativeDecimals = nativeCurrency.decimals ?? 2
+  const displayDecimals = displayCurrency.decimals ?? 2
 
   return (
     <div
@@ -175,7 +178,7 @@ export const NodeView: React.FC<NodeViewProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <RoleIcon size={15} color={roleConfig.color} />
+          <CircleDot size={15} color="#38bdf8" />
           <span
             style={{
               fontSize: '12px',
@@ -196,73 +199,140 @@ export const NodeView: React.FC<NodeViewProps> = ({
               fontWeight: 600,
               padding: '2px 5px',
               borderRadius: '4px',
-              backgroundColor: `${roleConfig.color}22`,
-              color: roleConfig.color,
+              backgroundColor: 'rgba(56, 189, 248, 0.15)',
+              color: '#38bdf8',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
             }}
           >
-            {roleConfig.label}
+            NODE
           </span>
           <GripHorizontal size={14} color="#64748b" />
         </div>
       </div>
 
-      {/* Balances Section */}
-      <div style={{ padding: '8px 10px' }}>
+      {/* Unified Money & Value Section */}
+      <div style={{ padding: '10px 10px' }}>
         <div
           style={{
-            fontSize: '10px',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginBottom: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '6px',
           }}
         >
-          Balances
+          <span
+            style={{
+              fontSize: '10px',
+              color: '#64748b',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              fontWeight: 600,
+            }}
+          >
+            Money Holding
+          </span>
+
+          {/* Currency Wrapper Badge */}
+          <div
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowUsdPrimary((prev) => !prev)
+            }}
+            title={`Currency Wrapper: ${nativeCurrency.name} (Factor x = ${getUnitsPerDollar(nativeCurrency)}). Click to toggle USD/Wrapper view.`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              backgroundColor: `${nativeCurrency.color}22`,
+              border: `1px solid ${nativeCurrency.color}66`,
+              padding: '2px 6px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: nativeCurrency.color,
+              }}
+            />
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 700,
+                color: nativeCurrency.color,
+                fontFamily: 'monospace',
+              }}
+            >
+              {nativeCurrency.symbol} {nativeCurrency.id}
+            </span>
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-          {balanceEntries.length === 0 ? (
-            <div style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic' }}>
-              0 balances
-            </div>
-          ) : (
-            balanceEntries.map(([currId, amount]) => {
-              const cur = currencyMap.get(currId)
-              const color = cur?.color || '#94a3b8'
-              const symbol = cur?.symbol || currId
-              return (
-                <div
-                  key={currId}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '11px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span
-                      style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        backgroundColor: color,
-                      }}
-                    />
-                    <span style={{ color: '#94a3b8', fontSize: '10px' }}>{cur?.name || currId}</span>
-                  </div>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 600, color }}>
-                    {amount.toLocaleString(undefined, {
-                      minimumFractionDigits: cur?.decimals ?? 2,
-                      maximumFractionDigits: cur?.decimals ?? 2,
-                    })}{' '}
-                    {symbol}
-                  </span>
-                </div>
-              )
-            })
-          )}
+
+        {/* Primary Money Value Display */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: '#070c18',
+            padding: '8px 10px',
+            borderRadius: '6px',
+            border: '1px solid #1e293b',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span
+              style={{
+                fontFamily: 'monospace',
+                fontSize: '14px',
+                fontWeight: 700,
+                color: displayCurrency.color || '#f8fafc',
+              }}
+            >
+              {displayBalance.toLocaleString(undefined, {
+                minimumFractionDigits: displayDecimals,
+                maximumFractionDigits: displayDecimals,
+              })}{' '}
+              {displayCurrency.symbol}
+            </span>
+            <span style={{ fontSize: '10px', color: '#64748b', fontFamily: 'monospace' }}>
+              {displayCurrency.id}
+            </span>
+          </div>
+
+          {/* Dollar Value & Wrapper Relation */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: '4px',
+              paddingTop: '4px',
+              borderTop: '1px solid #1e293b',
+              fontSize: '10px',
+            }}
+          >
+            <span style={{ color: '#94a3b8' }}>Dollar Value:</span>
+            <span
+              style={{
+                color: '#10b981',
+                fontWeight: 700,
+                fontFamily: 'monospace',
+              }}
+            >
+              ${totalUsdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+            </span>
+          </div>
         </div>
 
         {/* Node Rule Badge (if active) */}
@@ -282,14 +352,14 @@ export const NodeView: React.FC<NodeViewProps> = ({
               <>
                 <PlusCircle size={12} color="#34d399" />
                 <span style={{ color: '#34d399' }}>
-                  +{node.rule.amount} {currencyMap.get(node.rule.currencyId)?.symbol || node.rule.currencyId} / tick
+                  +{node.rule.amount} {nativeCurrency.symbol} / tick
                 </span>
               </>
             ) : (
               <>
                 <MinusCircle size={12} color="#f87171" />
                 <span style={{ color: '#f87171' }}>
-                  -{node.rule.amount} {currencyMap.get(node.rule.currencyId)?.symbol || node.rule.currencyId} / tick
+                  -{node.rule.amount} {nativeCurrency.symbol} / tick
                 </span>
               </>
             )}
@@ -342,3 +412,4 @@ export const NodeView: React.FC<NodeViewProps> = ({
     </div>
   )
 }
+export default NodeView

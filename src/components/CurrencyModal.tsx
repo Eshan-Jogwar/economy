@@ -18,6 +18,8 @@ import { Currency } from '../types/simulation'
 import {
   calculateTransitiveRate,
   calculateTransitiveBreakdown,
+  getUnitsPerDollar,
+  getBaseExchangeRate,
   DEFAULT_BASE_CURRENCY,
 } from '../utils/currency'
 
@@ -55,12 +57,12 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'currencies' | 'triangulation'>('currencies')
 
-  // Form State
+  // Form State: asks for conversion factor x where: your currency * x = 1 dollar
   const [name, setName] = useState('')
   const [symbol, setSymbol] = useState('')
   const [color, setColor] = useState(PRESET_COLORS[1])
   const [decimals, setDecimals] = useState(2)
-  const [baseExchangeRate, setBaseExchangeRate] = useState(1.0)
+  const [unitsPerDollar, setUnitsPerDollar] = useState<number>(1.0)
   const [error, setError] = useState<string | null>(null)
 
   // Calculator State
@@ -102,18 +104,23 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
       return
     }
 
+    const factorX = Math.max(0.000001, unitsPerDollar || 1.0)
+    const baseRate = 1.0 / factorX
+
     onAddCurrency({
       id,
       name: trimmedName,
       symbol: trimmedSymbol,
       color,
       decimals,
-      baseExchangeRate: Math.max(0.0001, baseExchangeRate),
+      unitsPerDollar: factorX,
+      baseExchangeRate: baseRate,
       isDefault: false,
     })
 
     setName('')
     setSymbol('')
+    setUnitsPerDollar(1.0)
     setColor(PRESET_COLORS[(currencies.length + 1) % PRESET_COLORS.length])
     setError(null)
   }
@@ -125,6 +132,9 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
     calcTargetId,
     currencies
   )
+
+  const activeFactorX = Math.max(0.000001, unitsPerDollar || 1.0)
+  const activeRateInUsd = 1.0 / activeFactorX
 
   return (
     <div
@@ -144,7 +154,7 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
       <div
         style={{
           width: '100%',
-          maxWidth: '680px',
+          maxWidth: '720px',
           backgroundColor: '#0f172a',
           border: '1px solid #334155',
           borderRadius: '12px',
@@ -153,7 +163,7 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
           color: '#f8fafc',
           display: 'flex',
           flexDirection: 'column',
-          maxHeight: '88vh',
+          maxHeight: '90vh',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -187,7 +197,7 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
-                  Custom Currency Registry & FX Triangulation
+                  Custom Currency Registry & Dollar Conversion
                 </h2>
                 <span
                   style={{
@@ -204,7 +214,7 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
                 </span>
               </div>
               <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
-                All cross-rates triangulate through the default currency as an intermediate pivot
+                Currencies are wrappers around real value. All currencies convert to the US Dollar anchor.
               </p>
             </div>
           </div>
@@ -340,13 +350,13 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
                     </span>
                   </div>
                   <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8', lineHeight: 1.5 }}>
-                    The Dollar serves as the transient pivot for all foreign exchange conversions.
-                    When any transaction executes between two different currencies (e.g. <em>AUR → SLV</em>),
-                    the transfer rate triangulates through Dollar:
-                    <br />
+                    The US Dollar is the single underlying standard of economic value. Currencies are visual
+                    wrappers or labels around this value. Every new currency defines its conversion factor{' '}
+                    <strong style={{ color: '#10b981' }}>x</strong> where{' '}
                     <span style={{ fontFamily: 'monospace', color: '#6ee7b7', fontWeight: 600 }}>
-                      Rate(A → B) = Rate(A → USD) / Rate(B → USD)
+                      [Your Currency] * x = $1.00 USD
                     </span>
+                    .
                   </p>
                 </div>
               </div>
@@ -355,7 +365,7 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
               <form
                 onSubmit={handleCreate}
                 style={{
-                  padding: '14px',
+                  padding: '16px',
                   backgroundColor: '#1e293b',
                   borderRadius: '8px',
                   border: '1px solid #334155',
@@ -366,21 +376,21 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>
-                    Create Custom Currency
+                    Create Custom Currency Wrapper
                   </div>
-                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                    Pegged against {baseCurrency.name} ({baseCurrency.symbol})
+                  <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 500 }}>
+                    Asks for conversion factor to US Dollar
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1.3fr', gap: '10px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
                       Name
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Solar Credit, Aurum"
+                      placeholder="e.g. Indian Rupee, Solar Credit"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       style={{
@@ -402,7 +412,7 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. ☼, ₡, EUR"
+                      placeholder="e.g. ₹, INR, ₡"
                       value={symbol}
                       onChange={(e) => setSymbol(e.target.value)}
                       style={{
@@ -420,19 +430,20 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
 
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
-                      Value in {baseCurrency.symbol} USD (Base Peg)
+                      Conversion to US Dollar: <span style={{ color: '#10b981', fontWeight: 600 }}>x</span>
                     </label>
                     <input
                       type="number"
                       step="any"
-                      min="0.0001"
-                      value={baseExchangeRate}
-                      onChange={(e) => setBaseExchangeRate(parseFloat(e.target.value) || 1)}
+                      min="0.000001"
+                      value={unitsPerDollar}
+                      onChange={(e) => setUnitsPerDollar(parseFloat(e.target.value) || 1)}
+                      placeholder="e.g. 83 for INR, 150 for JPY"
                       style={{
                         width: '100%',
                         padding: '8px 10px',
                         backgroundColor: '#0f172a',
-                        border: '1px solid #334155',
+                        border: '1px solid #10b981',
                         borderRadius: '6px',
                         color: '#10b981',
                         fontSize: '12px',
@@ -441,6 +452,41 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
                         boxSizing: 'border-box',
                       }}
                     />
+                  </div>
+                </div>
+
+                {/* Conversion Explanation & Live Preview Box */}
+                <div
+                  style={{
+                    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                    border: '1px solid #334155',
+                    borderRadius: '6px',
+                    padding: '10px 12px',
+                    fontSize: '11px',
+                    color: '#94a3b8',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#f8fafc' }}>
+                    <span style={{ fontWeight: 600 }}>
+                      Formula: {symbol.trim() || 'Currency'} * x = $1.00 USD
+                    </span>
+                    <span style={{ fontFamily: 'monospace', color: '#10b981', fontWeight: 700 }}>
+                      x = {activeFactorX}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '2px' }}>
+                    <span>
+                      • <strong>{activeFactorX.toLocaleString()} {symbol || 'units'}</strong> = $1.00 USD
+                    </span>
+                    <span>
+                      • 1 {symbol || 'unit'} = <strong>${activeRateInUsd.toFixed(4)} USD</strong>
+                    </span>
+                    <span>
+                      • <strong>$100.00 USD</strong> = {(100 * activeFactorX).toLocaleString()} {symbol || 'units'}
+                    </span>
                   </div>
                 </div>
 
@@ -530,12 +576,13 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
               {/* Configured Currencies List */}
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0', marginBottom: '8px' }}>
-                  Configured Currencies ({currencies.length})
+                  Configured Currency Wrappers ({currencies.length})
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {currencies.map((cur) => {
                     const isBase = cur.id === baseCurrency.id || cur.isDefault
-                    const inverseRate = cur.baseExchangeRate > 0 ? (1 / cur.baseExchangeRate).toFixed(3) : '0'
+                    const curUnitsPerDollar = getUnitsPerDollar(cur)
+                    const curRateInUsd = getBaseExchangeRate(cur)
 
                     return (
                       <div
@@ -589,38 +636,41 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Dollar Peg Display & Inline Editor */}
+                        {/* Dollar Peg Display & Inline Editor for x */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                              1 {cur.symbol} ={' '}
+                              Formula:{' '}
                               <span style={{ color: '#10b981', fontWeight: 700, fontFamily: 'monospace' }}>
-                                ${cur.baseExchangeRate.toFixed(cur.decimals > 2 ? cur.decimals : 2)} USD
+                                {cur.symbol} * {curUnitsPerDollar.toFixed(2)} = $1.00 USD
                               </span>
                             </div>
-                            {!isBase && (
-                              <div style={{ fontSize: '10px', color: '#64748b', fontFamily: 'monospace' }}>
-                                ($1.00 = {inverseRate} {cur.symbol})
-                              </div>
-                            )}
+                            <div style={{ fontSize: '10px', color: '#64748b', fontFamily: 'monospace' }}>
+                              1 {cur.symbol} = ${curRateInUsd.toFixed(4)} USD
+                            </div>
                           </div>
 
                           {!isBase ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <label style={{ fontSize: '10px', color: '#64748b' }}>Peg ($):</label>
+                              <label style={{ fontSize: '10px', color: '#64748b' }}>Factor x:</label>
                               <input
                                 type="number"
                                 step="any"
-                                min="0.0001"
-                                value={cur.baseExchangeRate}
+                                min="0.000001"
+                                value={curUnitsPerDollar}
                                 onChange={(e) => {
                                   const val = parseFloat(e.target.value)
                                   if (!isNaN(val) && val > 0) {
-                                    onUpdateCurrency({ ...cur, baseExchangeRate: val })
+                                    onUpdateCurrency({
+                                      ...cur,
+                                      unitsPerDollar: val,
+                                      baseExchangeRate: 1 / val,
+                                    })
                                   }
                                 }}
+                                title="Factor x: how many units equal $1.00 USD"
                                 style={{
-                                  width: '70px',
+                                  width: '76px',
                                   padding: '4px 6px',
                                   backgroundColor: '#0f172a',
                                   border: '1px solid #334155',
@@ -772,7 +822,7 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
 
                   <div>
                     <label style={{ display: 'block', fontSize: '10px', color: '#94a3b8', marginBottom: '4px' }}>
-                      To Currency
+                      To Target Currency
                     </label>
                     <select
                       value={calcTargetId}
@@ -797,13 +847,13 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
                   </div>
                 </div>
 
-                {/* 2-Step Intermediate Visual Flow */}
+                {/* 2-Step Breakdown Visual Flow */}
                 <div
                   style={{
-                    backgroundColor: '#090d16',
+                    backgroundColor: '#0f172a',
+                    border: '1px solid #334155',
                     borderRadius: '8px',
-                    padding: '14px',
-                    border: '1px solid #1e293b',
+                    padding: '12px 16px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -812,188 +862,144 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
                   }}
                 >
                   {/* Step 1: Source */}
-                  <div style={{ flex: 1, minWidth: '130px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
-                      Step 1: Source Currency
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                      Step 1: Input Value
                     </div>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: breakdown.sourceCurrency?.color || '#f8fafc' }}>
-                      {calcAmount.toFixed(breakdown.sourceCurrency?.decimals || 2)} {breakdown.sourceCurrency?.symbol}
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: breakdown.sourceCurrency?.color || '#38bdf8' }}>
+                      {calcAmount.toLocaleString()} {breakdown.sourceCurrency?.symbol}
                     </div>
-                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>
-                      Rate: ${breakdown.sourceRateInDollar.toFixed(2)} USD
+                    <div style={{ fontSize: '10px', color: '#64748b' }}>
+                      {breakdown.sourceCurrency?.name}
                     </div>
                   </div>
 
-                  {/* Flow Arrow 1 */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#10b981' }}>
-                    <span style={{ fontSize: '9px', fontWeight: 600 }}>× ${breakdown.sourceRateInDollar.toFixed(2)}</span>
-                    <ArrowRight size={16} />
-                  </div>
+                  <ArrowRight size={16} color="#64748b" />
 
-                  {/* Step 2: Intermediate USD Anchor */}
+                  {/* Intermediate Dollar Pivot */}
                   <div
                     style={{
-                      flex: 1.2,
-                      minWidth: '160px',
+                      textAlign: 'center',
                       backgroundColor: 'rgba(16, 185, 129, 0.1)',
                       border: '1px solid rgba(16, 185, 129, 0.4)',
-                      borderRadius: '6px',
-                      padding: '8px',
-                      textAlign: 'center',
+                      padding: '8px 14px',
+                      borderRadius: '8px',
                     }}
                   >
-                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      ★ Transient Pivot
+                    <div style={{ fontSize: '10px', color: '#10b981', fontWeight: 600, textTransform: 'uppercase' }}>
+                      Transient Pivot
                     </div>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#6ee7b7', fontFamily: 'monospace' }}>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#10b981', fontFamily: 'monospace' }}>
                       ${breakdown.intermediateDollarAmount.toFixed(2)} USD
                     </div>
-                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>
-                      Base intermediate valuation
+                    <div style={{ fontSize: '10px', color: '#6ee7b7' }}>
+                      Unified Value Anchor
                     </div>
                   </div>
 
-                  {/* Flow Arrow 2 */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#38bdf8' }}>
-                    <span style={{ fontSize: '9px', fontWeight: 600 }}>÷ ${breakdown.targetRateInDollar.toFixed(2)}</span>
-                    <ArrowRight size={16} />
-                  </div>
+                  <ArrowRight size={16} color="#64748b" />
 
-                  {/* Step 3: Target Result */}
-                  <div style={{ flex: 1, minWidth: '130px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
-                      Step 2: Target Result
+                  {/* Step 2: Target Result */}
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                      Step 2: Converted Output
                     </div>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: breakdown.targetCurrency?.color || '#38bdf8' }}>
-                      {breakdown.targetAmount.toFixed(breakdown.targetCurrency?.decimals || 2)} {breakdown.targetCurrency?.symbol}
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: breakdown.targetCurrency?.color || '#34d399' }}>
+                      {breakdown.targetAmount.toLocaleString(undefined, {
+                        minimumFractionDigits: breakdown.targetCurrency?.decimals ?? 2,
+                        maximumFractionDigits: breakdown.targetCurrency?.decimals ?? 2,
+                      })}{' '}
+                      {breakdown.targetCurrency?.symbol}
                     </div>
-                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>
-                      Rate: ${breakdown.targetRateInDollar.toFixed(2)} USD
+                    <div style={{ fontSize: '10px', color: '#64748b' }}>
+                      Rate: 1 {breakdown.sourceCurrency?.symbol} = {breakdown.effectiveRate.toFixed(4)} {breakdown.targetCurrency?.symbol}
                     </div>
                   </div>
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    backgroundColor: 'rgba(56, 189, 248, 0.08)',
-                    border: '1px solid rgba(56, 189, 248, 0.2)',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                  }}
-                >
-                  <span style={{ color: '#94a3b8' }}>Effective Transitive Cross-Rate:</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#38bdf8' }}>
-                    1 {breakdown.sourceCurrency?.symbol} = {breakdown.effectiveRate.toFixed(4)} {breakdown.targetCurrency?.symbol}
-                  </span>
                 </div>
               </div>
 
-              {/* Full N x N Transitive Cross-Rate Matrix */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Grid size={15} color="#a78bfa" />
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>
-                      Transitive FX Cross-Rate Matrix (N × N)
-                    </span>
-                  </div>
-                  <span style={{ fontSize: '10px', color: '#64748b' }}>
-                    Click any cell to load in calculator
+              {/* Cross-Rate Matrix */}
+              <div
+                style={{
+                  backgroundColor: '#1e293b',
+                  borderRadius: '10px',
+                  border: '1px solid #334155',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  overflowX: 'auto',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Grid size={16} color="#38bdf8" />
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>
+                    Transitive FX Cross-Rate Matrix
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                    (All cross rates triangulate transitively via US Dollar: Rate = Rate(A)/Rate(B))
                   </span>
                 </div>
 
-                <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #334155' }}>
-                  <table
-                    style={{
-                      width: '100%',
-                      borderCollapse: 'collapse',
-                      fontSize: '11px',
-                      backgroundColor: '#1e293b',
-                    }}
-                  >
-                    <thead>
-                      <tr style={{ backgroundColor: '#090d16', borderBottom: '1px solid #334155' }}>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', color: '#64748b', fontSize: '10px' }}>
-                          FROM \ TO
-                        </th>
-                        {currencies.map((target) => (
-                          <th
-                            key={target.id}
-                            style={{
-                              padding: '8px 10px',
-                              textAlign: 'right',
-                              color: target.color,
-                              fontWeight: 700,
-                              fontFamily: 'monospace',
-                            }}
-                          >
-                            {target.symbol} {target.id}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currencies.map((source) => (
-                        <tr
-                          key={source.id}
+                <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    fontSize: '11px',
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #334155' }}>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#94a3b8' }}>1 Unit of ↓</th>
+                      {currencies.map((c) => (
+                        <th
+                          key={c.id}
                           style={{
-                            borderBottom: '1px solid #334155',
+                            padding: '8px',
+                            textAlign: 'right',
+                            color: c.color,
+                            fontWeight: 700,
                           }}
                         >
-                          <td
-                            style={{
-                              padding: '8px 12px',
-                              color: source.color,
-                              fontWeight: 700,
-                              fontFamily: 'monospace',
-                              backgroundColor: '#0b1120',
-                            }}
-                          >
-                            {source.symbol} {source.id}
-                          </td>
-                          {currencies.map((target) => {
-                            const isDiagonal = source.id === target.id
-                            const rate = calculateTransitiveRate(source.id, target.id, currencies)
-
-                            return (
-                              <td
-                                key={target.id}
-                                onClick={() => {
-                                  setCalcSourceId(source.id)
-                                  setCalcTargetId(target.id)
-                                }}
-                                title={`1 ${source.symbol} = ${rate.toFixed(4)} ${target.symbol} (via USD)`}
-                                style={{
-                                  padding: '8px 10px',
-                                  textAlign: 'right',
-                                  fontFamily: 'monospace',
-                                  cursor: 'pointer',
-                                  backgroundColor: isDiagonal
-                                    ? 'rgba(255,255,255,0.02)'
-                                    : 'transparent',
-                                  color: isDiagonal
-                                    ? '#64748b'
-                                    : rate > 1
-                                    ? '#34d399'
-                                    : rate < 1
-                                    ? '#f87171'
-                                    : '#f8fafc',
-                                  fontWeight: isDiagonal ? 400 : 600,
-                                }}
-                              >
-                                {isDiagonal ? '1.0000' : rate.toFixed(4)}
-                              </td>
-                            )
-                          })}
-                        </tr>
+                          in {c.symbol}
+                        </th>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currencies.map((rowCur) => (
+                      <tr
+                        key={rowCur.id}
+                        style={{
+                          borderBottom: '1px solid #1e293b',
+                          backgroundColor: rowCur.id === baseCurrency.id ? 'rgba(16, 185, 129, 0.05)' : 'transparent',
+                        }}
+                      >
+                        <td style={{ padding: '8px', color: rowCur.color, fontWeight: 700 }}>
+                          {rowCur.name} ({rowCur.symbol})
+                        </td>
+                        {currencies.map((colCur) => {
+                          const rate = calculateTransitiveRate(rowCur.id, colCur.id, currencies)
+                          const isSelf = rowCur.id === colCur.id
+                          return (
+                            <td
+                              key={colCur.id}
+                              style={{
+                                padding: '8px',
+                                textAlign: 'right',
+                                color: isSelf ? '#64748b' : '#f8fafc',
+                                fontWeight: isSelf ? 400 : 600,
+                              }}
+                            >
+                              {rate.toFixed(colCur.decimals > 2 ? colCur.decimals : 3)}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </>
           )}
@@ -1002,3 +1008,4 @@ export const CurrencyModal: React.FC<CurrencyModalProps> = ({
     </div>
   )
 }
+export default CurrencyModal

@@ -2,11 +2,6 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   Search,
   CircleDot,
-  UserCheck,
-  Building2,
-  Landmark,
-  Coins,
-  Flame,
   CornerDownLeft,
   X,
 } from 'lucide-react'
@@ -23,7 +18,7 @@ interface RoleOption {
   role: NodeRole
   name: string
   subtitle: string
-  icon: typeof UserCheck
+  icon: typeof CircleDot
   color: string
   numberKey: string
   description: string
@@ -31,58 +26,13 @@ interface RoleOption {
 
 const ROLE_OPTIONS: RoleOption[] = [
   {
-    role: 'generic',
-    name: 'Generic Node',
+    role: 'node',
+    name: 'Node',
     subtitle: 'Holds money & routes transfers',
     icon: CircleDot,
     color: '#38bdf8',
     numberKey: '1',
-    description: 'Universal node entity capable of holding currency balances and acting as an economic junction.',
-  },
-  {
-    role: 'bank',
-    name: 'Central Bank',
-    subtitle: 'Reserve & monetary anchor',
-    icon: Landmark,
-    color: '#fbbf24',
-    numberKey: '2',
-    description: 'Maintains reserves and acts as financial liquidity center.',
-  },
-  {
-    role: 'market',
-    name: 'Market / Exchange Hub',
-    subtitle: 'Liquidity & FX conversion',
-    icon: Building2,
-    color: '#a78bfa',
-    numberKey: '3',
-    description: 'Facilitates inter-currency trade and FX rate conversions.',
-  },
-  {
-    role: 'agent',
-    name: 'Agent / Household',
-    subtitle: 'Standard economic actor',
-    icon: UserCheck,
-    color: '#06b6d4',
-    numberKey: '4',
-    description: 'Holds balances and sends/receives currency via transactions.',
-  },
-  {
-    role: 'mint',
-    name: 'Mint / Producer',
-    subtitle: 'Autonomous wealth injector',
-    icon: Coins,
-    color: '#34d399',
-    numberKey: '5',
-    description: 'Generates new currency supply each tick (+/tick).',
-  },
-  {
-    role: 'sink',
-    name: 'Sink / Consumer',
-    subtitle: 'Autonomous drain / tax sink',
-    icon: Flame,
-    color: '#f87171',
-    numberKey: '6',
-    description: 'Permanently absorbs and drains currency supply (-/tick).',
+    description: 'Universal node entity capable of holding money balances and acting as an economic junction.',
   },
 ]
 

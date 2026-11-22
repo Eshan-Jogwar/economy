@@ -57,16 +57,22 @@ export const CreateEdgeModal: React.FC<CreateEdgeModalProps> = ({
   useEffect(() => {
     if (!isOpen || !sourceNode || !targetNode) return
 
-    // Pick top currency held by source node if possible, else first currency
-    const sourceCurrenciesWithBalance = Object.keys(sourceNode.balances).filter(
-      (c) => (sourceNode.balances[c] ?? 0) > 0
-    )
-    const defaultSourceCur = sourceCurrenciesWithBalance[0] || currencies[0]?.id || 'CRD'
-    const defaultTargetCur = defaultSourceCur
+    // Pick currency wrapper of source node and target node
+    const defaultSourceCur =
+      sourceNode.currencyId ||
+      Object.keys(sourceNode.balances)[0] ||
+      currencies[0]?.id ||
+      'USD'
+    const defaultTargetCur =
+      targetNode.currencyId ||
+      Object.keys(targetNode.balances)[0] ||
+      currencies[0]?.id ||
+      'USD'
 
     setSourceCurrencyId(defaultSourceCur)
     setTargetCurrencyId(defaultTargetCur)
-    setExchangeRate(1.0)
+    const initRate = calculateTransitiveRate(defaultSourceCur, defaultTargetCur, currencies)
+    setExchangeRate(parseFloat(initRate.toFixed(4)))
     setAmountRuleType('fixed')
     setAmountValue(25)
     setConditionType('always')

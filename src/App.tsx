@@ -31,6 +31,7 @@ export function App() {
   // Initialize with Preset 1 (Dual Currency FX Bridge)
   const [state, setState] = useState<SimulationState>(() => dualCurrencyFxBridge())
   const [activePresetKey, setActivePresetKey] = useState<string>('dual-currency')
+  const [viewCurrencyId, setViewCurrencyId] = useState<string>('native')
 
   // Selection
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -115,6 +116,7 @@ export function App() {
     setActivePresetKey(presetKey)
     setSelectedNodeId(null)
     setSelectedTransactionId(null)
+    setViewCurrencyId('native')
     setRecentEvents([])
     setEventHistory([])
 
@@ -265,20 +267,10 @@ export function App() {
 
   // Add currency
   const handleAddCurrency = (currency: Currency) => {
-    setState((prev) => {
-      const updatedNodes = prev.nodes.map((n) => ({
-        ...n,
-        balances: {
-          ...n.balances,
-          [currency.id]: 0,
-        },
-      }))
-      return {
-        ...prev,
-        currencies: [...prev.currencies, currency],
-        nodes: updatedNodes,
-      }
-    })
+    setState((prev) => ({
+      ...prev,
+      currencies: [...prev.currencies, currency],
+    }))
   }
 
   // Update currency
@@ -399,6 +391,8 @@ export function App() {
         activePresetName={activePresetKey}
         isMetricsOpen={isMetricsOpen}
         isLogOpen={isLogOpen}
+        viewCurrencyId={viewCurrencyId}
+        onSelectViewCurrency={setViewCurrencyId}
         onTogglePlay={() => setState((prev) => ({ ...prev, isPlaying: !prev.isPlaying }))}
         onStepTick={stepTick}
         onReset={handleReset}
@@ -430,6 +424,7 @@ export function App() {
             recentEvents={recentEvents}
             selectedNodeId={selectedNodeId}
             selectedTransactionId={selectedTransactionId}
+            viewCurrencyId={viewCurrencyId}
             onSelectNode={setSelectedNodeId}
             onSelectTransaction={setSelectedTransactionId}
             onUpdateNodePosition={handleUpdateNodePosition}
@@ -499,7 +494,6 @@ export function App() {
       {pendingNodeCreation && (
         <CreateNodeModal
           isOpen={true}
-          initialRole={pendingNodeCreation.role}
           canvasPosition={pendingNodeCreation.position}
           currencies={state.currencies}
           existingNodeCount={state.nodes.length}

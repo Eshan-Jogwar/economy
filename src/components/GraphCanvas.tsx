@@ -26,6 +26,7 @@ interface GraphCanvasProps {
   recentEvents: TransactionExecutionEvent[]
   selectedNodeId: string | null
   selectedTransactionId: string | null
+  viewCurrencyId?: string
   onSelectNode: (nodeId: string | null) => void
   onSelectTransaction: (txId: string | null) => void
   onUpdateNodePosition: (nodeId: string, position: { x: number; y: number }) => void
@@ -106,6 +107,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   recentEvents,
   selectedNodeId,
   selectedTransactionId,
+  viewCurrencyId = 'native',
   onSelectNode,
   onSelectTransaction,
   onUpdateNodePosition,
@@ -687,6 +689,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                 selected={selectedNodeId === node.id}
                 isConnectingSource={connectingSourceId === node.id}
                 isPotentialTarget={connectingSourceId !== null && connectingSourceId !== node.id && hoveredTargetNodeId === node.id}
+                viewCurrencyId={viewCurrencyId}
                 onSelect={() => {
                   onSelectNode(node.id)
                   onSelectTransaction(null)

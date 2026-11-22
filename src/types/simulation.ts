@@ -4,11 +4,12 @@ export type Currency = {
   symbol: string
   color: string
   decimals: number
-  baseExchangeRate: number
+  baseExchangeRate: number // Value of 1 unit in USD ($) = 1 / unitsPerDollar
+  unitsPerDollar?: number // Factor x where: your currency * x = $1.00 USD
   isDefault?: boolean
 }
 
-export type NodeRole = 'generic' | 'agent' | 'market' | 'bank' | 'mint' | 'sink'
+export type NodeRole = 'node'
 
 export type NodeRule = {
   type: 'none' | 'mint' | 'drain'
@@ -21,6 +22,7 @@ export type SimulationNode = {
   label: string
   role: NodeRole
   position: { x: number; y: number }
+  currencyId?: string // Node's currency wrapper (e.g. 'USD', 'INR', 'EUR')
   balances: Record<string, number>
   rule?: NodeRule
 }

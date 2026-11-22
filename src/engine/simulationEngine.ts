@@ -4,6 +4,7 @@ import {
   TransactionExecutionEvent,
   TickSnapshot,
 } from '../types/simulation'
+import { convertCurrency } from '../utils/currency'
 
 /**
  * Calculates the total supply of each currency across all nodes.
@@ -48,6 +49,7 @@ export function calculateVelocity(
  * Executes one tick of the simulation:
  * - Applies node rules (mint/drain)
  * - Evaluates and executes transactions
+ * - Keeps node holdings unified under its currency wrapper without splitting
  * - Updates tick and history
  */
 export function executeTick(state: SimulationState): {
@@ -55,23 +57,23 @@ export function executeTick(state: SimulationState): {
   events: TransactionExecutionEvent[]
 } {
   // Step 1: Apply node rules (mint/drain) first - create initial balance copies
-  let nodeBalances: Record<string, Record<string, number>> = {}
   let updatedNodes: SimulationNode[] = state.nodes.map((node) => {
     const baseBalances: Record<string, number> = { ...node.balances }
-    nodeBalances[node.id] = baseBalances
+    const nodeCurId = node.currencyId || Object.keys(baseBalances)[0] || 'USD'
 
     if (node.rule?.type === 'mint') {
-      // Mint adds to the specified currency balance
-      baseBalances[node.rule.currencyId] = (baseBalances[node.rule.currencyId] || 0) + node.rule.amount
+      const curId = node.rule.currencyId || nodeCurId
+      baseBalances[curId] = (baseBalances[curId] || 0) + node.rule.amount
     } else if (node.rule?.type === 'drain') {
-      // Drain subtracts from the specified currency balance (not below 0)
-      if ((baseBalances[node.rule.currencyId] || 0) >= node.rule.amount) {
-        baseBalances[node.rule.currencyId] = baseBalances[node.rule.currencyId]! - node.rule.amount
+      const curId = node.rule.currencyId || nodeCurId
+      if ((baseBalances[curId] || 0) >= node.rule.amount) {
+        baseBalances[curId] = (baseBalances[curId] || 0) - node.rule.amount
       }
     }
 
     return {
       ...node,
+      currencyId: nodeCurId,
       balances: baseBalances,
     }
   })
@@ -89,10 +91,25 @@ export function executeTick(state: SimulationState): {
 
     if (!sourceNode || !targetNode) continue
 
+    const sourcePrimaryCur = sourceNode.currencyId || Object.keys(sourceNode.balances)[0] || 'USD'
+    const targetPrimaryCur = targetNode.currencyId || Object.keys(targetNode.balances)[0] || 'USD'
+    const sourceCurId = tx.sourceCurrencyId || sourcePrimaryCur
+    const targetCurId = tx.targetCurrencyId || targetPrimaryCur
+
+    // Available balance in sourceCurId
+    let availableBalance = sourceNode.balances[sourceCurId] ?? 0
+    if (availableBalance === 0 && sourcePrimaryCur !== sourceCurId && (sourceNode.balances[sourcePrimaryCur] ?? 0) > 0) {
+      availableBalance = convertCurrency(
+        sourceNode.balances[sourcePrimaryCur],
+        sourcePrimaryCur,
+        sourceCurId,
+        state.currencies
+      )
+    }
+
     // Check condition
     if (tx.condition.type === 'min_balance') {
-      const sourceBalance = sourceNode.balances[tx.sourceCurrencyId] || 0
-      if (sourceBalance < (tx.condition.threshold || 0)) continue
+      if (availableBalance < (tx.condition.threshold || 0)) continue
     }
     // 'always' condition: always execute if active and nodes exist
 
@@ -101,14 +118,12 @@ export function executeTick(state: SimulationState): {
     if (tx.amountRule.type === 'fixed') {
       transferAmount = tx.amountRule.value
     } else if (tx.amountRule.type === 'percent_balance') {
-      const sourceBalance = sourceNode.balances[tx.sourceCurrencyId] || 0
-      transferAmount = sourceBalance * (tx.amountRule.value / 100)
+      transferAmount = availableBalance * (tx.amountRule.value / 100)
     } else {
       continue
     }
 
     // Cap transfer at available balance and ensure positive
-    const availableBalance = sourceNode.balances[tx.sourceCurrencyId] || 0
     if (transferAmount <= 0 || transferAmount > availableBalance) continue
 
     // Compute source and target amounts
@@ -117,11 +132,29 @@ export function executeTick(state: SimulationState): {
 
     // Update source node balance
     const newSourceBalances: Record<string, number> = { ...sourceNode.balances }
-    newSourceBalances[tx.sourceCurrencyId] = availableBalance - sourceAmount
+    if (newSourceBalances[sourceCurId] !== undefined) {
+      newSourceBalances[sourceCurId] = Math.max(0, newSourceBalances[sourceCurId] - sourceAmount)
+    } else if (newSourceBalances[sourcePrimaryCur] !== undefined) {
+      const deductionInPrimary = convertCurrency(
+        sourceAmount,
+        sourceCurId,
+        sourcePrimaryCur,
+        state.currencies
+      )
+      newSourceBalances[sourcePrimaryCur] = Math.max(0, newSourceBalances[sourcePrimaryCur] - deductionInPrimary)
+    }
 
-    // Update target node balance
+    // Update target node balance:
+    // Money is unified under target's currency wrapper (not split into multiple currencies)
     const newTargetBalances: Record<string, number> = { ...targetNode.balances }
-    newTargetBalances[tx.targetCurrencyId] = (newTargetBalances[tx.targetCurrencyId] || 0) + targetAmount
+    if (targetCurId === targetPrimaryCur || Object.keys(newTargetBalances).length <= 1) {
+      const additionInPrimary = targetCurId === targetPrimaryCur
+        ? targetAmount
+        : convertCurrency(targetAmount, targetCurId, targetPrimaryCur, state.currencies)
+      newTargetBalances[targetPrimaryCur] = (newTargetBalances[targetPrimaryCur] || 0) + additionInPrimary
+    } else {
+      newTargetBalances[targetCurId] = (newTargetBalances[targetCurId] || 0) + targetAmount
+    }
 
     // Apply updated balances to nodes
     updatedNodes = updatedNodes.map((n) => {
@@ -142,9 +175,9 @@ export function executeTick(state: SimulationState): {
       sourceNodeId: tx.source,
       targetNodeId: tx.target,
       sourceAmount: sourceAmount,
-      sourceCurrencyId: tx.sourceCurrencyId,
+      sourceCurrencyId: sourceCurId,
       targetAmount: targetAmount,
-      targetCurrencyId: tx.targetCurrencyId,
+      targetCurrencyId: targetCurId,
       exchangeRate: tx.exchangeRate,
       timestamp: Date.now(),
     }
