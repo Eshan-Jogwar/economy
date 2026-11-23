@@ -5,6 +5,7 @@ import {
   ZoomOut,
   RotateCcw,
   Scissors,
+  Square,
   HelpCircle,
 } from 'lucide-react'
 import {
@@ -18,6 +19,7 @@ import { NodeView } from './NodeView'
 import { EdgeView } from './EdgeView'
 import { ParticleLayer } from './ParticleLayer'
 import { AddNodeMenu } from './AddNodeMenu'
+import { getNodeIntersection } from '../utils'
 
 interface GraphCanvasProps {
   nodes: SimulationNode[]
@@ -35,9 +37,11 @@ interface GraphCanvasProps {
   onDuplicateNode?: (nodeId: string) => void
   onRequestCreateTransaction: (sourceId: string, targetId: string) => void
   onDeleteTransaction: (txId: string) => void
+  onDeleteNodes?: (nodeIds: string[]) => void
+  onDeleteTransactions?: (txIds: string[]) => void
 }
 
-const NODE_DIMENSIONS = { width: 220, height: 130 }
+const NODE_DIMENSIONS = { width: 200, height: 80 }
 
 // Helper: 2D line segment orientation
 function ccw(p1: { x: number; y: number }, p2: { x: number; y: number }, p3: { x: number; y: number }): boolean {
@@ -54,50 +58,14 @@ function segmentsIntersect(
   return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d)
 }
 
-// Helper: Check if knife line intersects cubic Bezier edge
+// Helper: Check if knife line intersects straight edge line
 function knifeCutsEdge(
   knifeStart: { x: number; y: number },
   knifeEnd: { x: number; y: number },
   src: { x: number; y: number },
   tgt: { x: number; y: number }
 ): boolean {
-  const srcX = src.x + NODE_DIMENSIONS.width
-  const srcY = src.y + NODE_DIMENSIONS.height / 2
-  const tgtX = tgt.x
-  const tgtY = tgt.y + NODE_DIMENSIONS.height / 2
-
-  const dx = Math.max(Math.abs(tgtX - srcX) * 0.55, 60)
-  const ctrl1X = srcX + dx
-  const ctrl1Y = srcY
-  const ctrl2X = tgtX - dx
-  const ctrl2Y = tgtY
-
-  // Sample 8 points along the cubic bezier
-  const samples: { x: number; y: number }[] = []
-  const steps = 8
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps
-    const invT = 1 - t
-    const x =
-      invT * invT * invT * srcX +
-      3 * invT * invT * t * ctrl1X +
-      3 * invT * t * t * ctrl2X +
-      t * t * t * tgtX
-    const y =
-      invT * invT * invT * srcY +
-      3 * invT * invT * t * ctrl1Y +
-      3 * invT * t * t * ctrl2Y +
-      t * t * t * tgtY
-    samples.push({ x, y })
-  }
-
-  for (let i = 0; i < samples.length - 1; i++) {
-    if (segmentsIntersect(knifeStart, knifeEnd, samples[i], samples[i + 1])) {
-      return true
-    }
-  }
-
-  return false
+  return segmentsIntersect(knifeStart, knifeEnd, src, tgt)
 }
 
 export const GraphCanvas: React.FC<GraphCanvasProps> = ({
@@ -116,6 +84,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   onDuplicateNode,
   onRequestCreateTransaction,
   onDeleteTransaction,
+  onDeleteNodes,
+  onDeleteTransactions,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -125,9 +95,82 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   const [isPanning, setIsPanning] = useState(false)
   const panStartRef = useRef({ x: 0, y: 0, initialPanX: 0, initialPanY: 0 })
 
+  // Rectangle Marquee Selection Tool
+  const [selectionBox, setSelectionBox] = useState<{
+    startX: number
+    startY: number
+    currentX: number
+    currentY: number
+  } | null>(null)
+
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(
+    () => new Set(selectedNodeId ? [selectedNodeId] : [])
+  )
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<Set<string>>(
+    () => new Set(selectedTransactionId ? [selectedTransactionId] : [])
+  )
+
+  const [isSpacePressed, setIsSpacePressed] = useState(false)
+
+  // Sync external selection props
+  useEffect(() => {
+    if (selectedNodeId) {
+      setSelectedNodeIds((prev) => {
+        if (prev.has(selectedNodeId) && prev.size === 1) return prev
+        return new Set([selectedNodeId])
+      })
+    } else {
+      setSelectedNodeIds((prev) => (prev.size <= 1 ? new Set() : prev))
+    }
+  }, [selectedNodeId])
+
+  useEffect(() => {
+    if (selectedTransactionId) {
+      setSelectedTransactionIds((prev) => {
+        if (prev.has(selectedTransactionId) && prev.size === 1) return prev
+        return new Set([selectedTransactionId])
+      })
+    } else {
+      setSelectedTransactionIds((prev) => (prev.size <= 1 ? new Set() : prev))
+    }
+  }, [selectedTransactionId])
+
+  // Track space key for panning
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA' ||
+        document.activeElement?.tagName === 'SELECT'
+      ) {
+        return
+      }
+      if (e.code === 'Space' && !e.repeat) {
+        setIsSpacePressed(true)
+      }
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [])
+
   // Node Dragging
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
-  const dragStartRef = useRef({
+  const dragStartRef = useRef<{
+    mouseX: number
+    mouseY: number
+    initialNodeX: number
+    initialNodeY: number
+    initialPositions?: Record<string, { x: number; y: number }>
+  }>({
     mouseX: 0,
     mouseY: 0,
     initialNodeX: 0,
@@ -204,7 +247,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     }
   }
 
-  // Handle canvas background mouse down (Panning or Knife cutting)
+  // Handle canvas background mouse down (Panning, Knife cutting, or Rectangle Selection)
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     lastMousePosRef.current = { clientX: e.clientX, clientY: e.clientY }
 
@@ -220,12 +263,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       return
     }
 
-    // Normal Left Click or Middle Click = Canvas Pan & Deselect
-    if (e.button === 0 || e.button === 1) {
-      if (addMenuState.isOpen) {
-        setAddMenuState((prev) => ({ ...prev, isOpen: false }))
-        return
-      }
+    if (addMenuState.isOpen) {
+      setAddMenuState((prev) => ({ ...prev, isOpen: false }))
+      return
+    }
+
+    // Pan canvas on Middle Click (button 1) OR Alt+LeftClick OR Spacebar+LeftClick
+    if (e.button === 1 || (e.button === 0 && (e.altKey || isSpacePressed))) {
       setIsPanning(true)
       panStartRef.current = {
         x: e.clientX,
@@ -233,8 +277,26 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         initialPanX: pan.x,
         initialPanY: pan.y,
       }
-      onSelectNode(null)
-      onSelectTransaction(null)
+      return
+    }
+
+    // Normal Left Click on empty canvas = Rectangle Selection Tool
+    if (e.button === 0) {
+      const canvasPos = screenToCanvas(e.clientX, e.clientY)
+      setSelectionBox({
+        startX: canvasPos.x,
+        startY: canvasPos.y,
+        currentX: canvasPos.x,
+        currentY: canvasPos.y,
+      })
+
+      if (!e.shiftKey) {
+        setSelectedNodeIds(new Set())
+        setSelectedTransactionIds(new Set())
+        onSelectNode(null)
+        onSelectTransaction(null)
+      }
+
       if (connectingSourceId) {
         setConnectingSourceId(null)
       }
@@ -257,21 +319,36 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     })
   }
 
-  // Start dragging a node
+  // Start dragging a node (supports multi-node group dragging)
   const handleNodeDragStart = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation()
     const node = nodeMap.get(nodeId)
     if (!node) return
 
+    let nodesToDrag: string[] = []
+    if (selectedNodeIds.has(nodeId)) {
+      nodesToDrag = Array.from(selectedNodeIds)
+    } else {
+      nodesToDrag = [nodeId]
+      setSelectedNodeIds(new Set([nodeId]))
+      setSelectedTransactionIds(new Set())
+      onSelectNode(nodeId)
+      onSelectTransaction(null)
+    }
+
     setDraggingNodeId(nodeId)
-    onSelectNode(nodeId)
-    onSelectTransaction(null)
+    const initialPositions: Record<string, { x: number; y: number }> = {}
+    nodesToDrag.forEach((id) => {
+      const n = nodeMap.get(id)
+      if (n) initialPositions[id] = { ...n.position }
+    })
 
     dragStartRef.current = {
       mouseX: e.clientX,
       mouseY: e.clientY,
       initialNodeX: node.position.x,
       initialNodeY: node.position.y,
+      initialPositions,
     }
   }
 
@@ -353,13 +430,103 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         })
       }
 
-      // Drag node
+      // Drag node (single or multi-selected)
       if (draggingNodeId) {
         const dx = (e.clientX - dragStartRef.current.mouseX) / zoom
         const dy = (e.clientY - dragStartRef.current.mouseY) / zoom
-        const newX = Math.round(dragStartRef.current.initialNodeX + dx)
-        const newY = Math.round(dragStartRef.current.initialNodeY + dy)
-        onUpdateNodePosition(draggingNodeId, { x: newX, y: newY })
+        const initPositions = dragStartRef.current.initialPositions
+        if (initPositions && Object.keys(initPositions).length > 0) {
+          Object.entries(initPositions).forEach(([id, pos]) => {
+            const newX = Math.round(pos.x + dx)
+            const newY = Math.round(pos.y + dy)
+            onUpdateNodePosition(id, { x: newX, y: newY })
+          })
+        } else {
+          const newX = Math.round(dragStartRef.current.initialNodeX + dx)
+          const newY = Math.round(dragStartRef.current.initialNodeY + dy)
+          onUpdateNodePosition(draggingNodeId, { x: newX, y: newY })
+        }
+      }
+
+      // Live Rectangle Marquee Selection Dragging
+      if (selectionBox) {
+        const currentX = canvasPos.x
+        const currentY = canvasPos.y
+        setSelectionBox((prev) => (prev ? { ...prev, currentX, currentY } : null))
+
+        const minX = Math.min(selectionBox.startX, currentX)
+        const maxX = Math.max(selectionBox.startX, currentX)
+        const minY = Math.min(selectionBox.startY, currentY)
+        const maxY = Math.max(selectionBox.startY, currentY)
+
+        if (maxX - minX > 2 || maxY - minY > 2) {
+          const newSelectedNodes = new Set<string>(e.shiftKey ? selectedNodeIds : [])
+          for (const n of nodes) {
+            const nMinX = n.position.x
+            const nMaxX = n.position.x + NODE_DIMENSIONS.width
+            const nMinY = n.position.y
+            const nMaxY = n.position.y + NODE_DIMENSIONS.height
+            const overlaps = !(nMaxX < minX || nMinX > maxX || nMaxY < minY || nMinY > maxY)
+            if (overlaps) {
+              newSelectedNodes.add(n.id)
+            }
+          }
+
+          const newSelectedTxs = new Set<string>(e.shiftKey ? selectedTransactionIds : [])
+          for (const tx of transactions) {
+            const sNode = nodeMap.get(tx.source)
+            const tNode = nodeMap.get(tx.target)
+            if (!sNode || !tNode) continue
+
+            if (newSelectedNodes.has(tx.source) && newSelectedNodes.has(tx.target)) {
+              newSelectedTxs.add(tx.id)
+              continue
+            }
+
+            let sInt = getNodeIntersection(
+              { position: sNode.position, measured: NODE_DIMENSIONS },
+              { position: tNode.position, measured: NODE_DIMENSIONS }
+            )
+            let tInt = getNodeIntersection(
+              { position: tNode.position, measured: NODE_DIMENSIONS },
+              { position: sNode.position, measured: NODE_DIMENSIONS }
+            )
+            const isBidi = transactions.some(
+              (o) => o.id !== tx.id && o.source === tx.target && o.target === tx.source
+            )
+            if (isBidi) {
+              const dx = tInt.x - sInt.x
+              const dy = tInt.y - sInt.y
+              const len = Math.sqrt(dx * dx + dy * dy) || 1
+              const offset = 12
+              const nx = -dy / len
+              const ny = dx / len
+              sInt = { x: sInt.x + nx * offset, y: sInt.y + ny * offset }
+              tInt = { x: tInt.x + nx * offset, y: tInt.y + ny * offset }
+            }
+
+            const sInside = sInt.x >= minX && sInt.x <= maxX && sInt.y >= minY && sInt.y <= maxY
+            const tInside = tInt.x >= minX && tInt.x <= maxX && tInt.y >= minY && tInt.y <= maxY
+
+            const rTopA = { x: minX, y: minY }, rTopB = { x: maxX, y: minY }
+            const rRightA = { x: maxX, y: minY }, rRightB = { x: maxX, y: maxY }
+            const rBottomA = { x: minX, y: maxY }, rBottomB = { x: maxX, y: maxY }
+            const rLeftA = { x: minX, y: minY }, rLeftB = { x: minX, y: maxY }
+
+            const intersectsBorder =
+              segmentsIntersect(sInt, tInt, rTopA, rTopB) ||
+              segmentsIntersect(sInt, tInt, rRightA, rRightB) ||
+              segmentsIntersect(sInt, tInt, rBottomA, rBottomB) ||
+              segmentsIntersect(sInt, tInt, rLeftA, rLeftB)
+
+            if (sInside || tInside || intersectsBorder) {
+              newSelectedTxs.add(tx.id)
+            }
+          }
+
+          setSelectedNodeIds(newSelectedNodes)
+          setSelectedTransactionIds(newSelectedTxs)
+        }
       }
     }
 
@@ -373,11 +540,60 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           const sNode = nodeMap.get(tx.source)
           const tNode = nodeMap.get(tx.target)
           if (!sNode || !tNode) return false
-          return knifeCutsEdge(knifeCut.startCanvas, knifeCut.endCanvas, sNode.position, tNode.position)
+          let sInt = getNodeIntersection(
+            { position: sNode.position, measured: NODE_DIMENSIONS },
+            { position: tNode.position, measured: NODE_DIMENSIONS }
+          )
+          let tInt = getNodeIntersection(
+            { position: tNode.position, measured: NODE_DIMENSIONS },
+            { position: sNode.position, measured: NODE_DIMENSIONS }
+          )
+          const isBidi = transactions.some(
+            (o) => o.id !== tx.id && o.source === tx.target && o.target === tx.source
+          )
+          if (isBidi) {
+            const dx = tInt.x - sInt.x
+            const dy = tInt.y - sInt.y
+            const len = Math.sqrt(dx * dx + dy * dy) || 1
+            const offset = 12
+            const nx = -dy / len
+            const ny = dx / len
+            sInt = { x: sInt.x + nx * offset, y: sInt.y + ny * offset }
+            tInt = { x: tInt.x + nx * offset, y: tInt.y + ny * offset }
+          }
+          return knifeCutsEdge(knifeCut.startCanvas, knifeCut.endCanvas, sInt, tInt)
         })
 
         cutEdges.forEach((tx) => onDeleteTransaction(tx.id))
         setKnifeCut({ active: false, startCanvas: { x: 0, y: 0 }, endCanvas: { x: 0, y: 0 } })
+      }
+
+      // Marquee selection box completion
+      if (selectionBox) {
+        const dx = Math.abs(selectionBox.currentX - selectionBox.startX)
+        const dy = Math.abs(selectionBox.currentY - selectionBox.startY)
+        if (dx <= 3 && dy <= 3) {
+          // Click on empty canvas without dragging: deselect all
+          setSelectedNodeIds(new Set())
+          setSelectedTransactionIds(new Set())
+          onSelectNode(null)
+          onSelectTransaction(null)
+        } else {
+          // If only 1 node was selected in marquee, open Inspector
+          if (selectedNodeIds.size === 1) {
+            const singleId = Array.from(selectedNodeIds)[0]
+            onSelectNode(singleId)
+            onSelectTransaction(null)
+          } else if (selectedNodeIds.size === 0 && selectedTransactionIds.size === 1) {
+            const singleTxId = Array.from(selectedTransactionIds)[0]
+            onSelectTransaction(singleTxId)
+            onSelectNode(null)
+          } else {
+            onSelectNode(null)
+            onSelectTransaction(null)
+          }
+        }
+        setSelectionBox(null)
       }
 
       // If dragging a connection and released over empty canvas
@@ -402,6 +618,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     connectingSourceId,
     hoveredTargetNodeId,
     knifeCut,
+    selectionBox,
+    selectedNodeIds,
+    selectedTransactionIds,
     zoom,
     screenToCanvas,
     onUpdateNodePosition,
@@ -410,9 +629,11 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     nodeMap,
     onRequestCreateTransaction,
     onDeleteTransaction,
+    onSelectNode,
+    onSelectTransaction,
   ])
 
-  // Global Blender Keyboard Shortcuts: Shift+A, X/Delete, Shift+D, Escape, A/Alt+A
+  // Global Blender Keyboard Shortcuts: Shift+A, X/Delete/Backspace, Shift+D, Escape, A/Alt+A
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -446,28 +667,70 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         }
       }
 
-      // X or Delete = Delete selected node or transaction
+      // X or Delete or Backspace = Delete selected nodes & transactions (including marquee selected items)
       if (e.key === 'x' || e.key === 'X' || e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedNodeId) {
+        const nodeIdsToDelete = new Set(selectedNodeIds)
+        if (selectedNodeId) nodeIdsToDelete.add(selectedNodeId)
+
+        const txIdsToDelete = new Set(selectedTransactionIds)
+        if (selectedTransactionId) txIdsToDelete.add(selectedTransactionId)
+
+        if (nodeIdsToDelete.size > 0 || txIdsToDelete.size > 0) {
           e.preventDefault()
-          onDeleteNode(selectedNodeId)
+
+          if (onDeleteNodes) {
+            onDeleteNodes(Array.from(nodeIdsToDelete))
+          } else {
+            nodeIdsToDelete.forEach((id) => onDeleteNode(id))
+          }
+
+          const remainingTxIds = Array.from(txIdsToDelete).filter((txId) => {
+            const tx = transactions.find((t) => t.id === txId)
+            if (!tx) return false
+            return !nodeIdsToDelete.has(tx.source) && !nodeIdsToDelete.has(tx.target)
+          })
+
+          if (onDeleteTransactions) {
+            onDeleteTransactions(remainingTxIds)
+          } else {
+            remainingTxIds.forEach((id) => onDeleteTransaction(id))
+          }
+
+          setSelectedNodeIds(new Set())
+          setSelectedTransactionIds(new Set())
           onSelectNode(null)
-        } else if (selectedTransactionId) {
-          e.preventDefault()
-          onDeleteTransaction(selectedTransactionId)
           onSelectTransaction(null)
+          return
         }
-        return
       }
 
-      // Escape = Cancel wiring / dismiss menus / deselect
+      // Escape = Cancel wiring / dismiss menus / clear selection
       if (e.key === 'Escape') {
         setConnectingSourceId(null)
         setHoveredTargetNodeId(null)
         setAddMenuState((prev) => ({ ...prev, isOpen: false }))
         setKnifeCut({ active: false, startCanvas: { x: 0, y: 0 }, endCanvas: { x: 0, y: 0 } })
+        setSelectionBox(null)
+        setSelectedNodeIds(new Set())
+        setSelectedTransactionIds(new Set())
         onSelectNode(null)
         onSelectTransaction(null)
+        return
+      }
+
+      // A / Alt+A (Blender-style select all / deselect all)
+      if ((e.key === 'a' || e.key === 'A') && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        if (e.altKey) {
+          e.preventDefault()
+          setSelectedNodeIds(new Set())
+          setSelectedTransactionIds(new Set())
+          onSelectNode(null)
+          onSelectTransaction(null)
+        } else {
+          e.preventDefault()
+          setSelectedNodeIds(new Set(nodes.map((n) => n.id)))
+          setSelectedTransactionIds(new Set(transactions.map((t) => t.id)))
+        }
         return
       }
     }
@@ -477,41 +740,61 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   }, [
     selectedNodeId,
     selectedTransactionId,
+    selectedNodeIds,
+    selectedTransactionIds,
+    nodes,
+    transactions,
     onDeleteNode,
+    onDeleteNodes,
     onDeleteTransaction,
+    onDeleteTransactions,
     onDuplicateNode,
     onSelectNode,
     onSelectTransaction,
     screenToCanvas,
   ])
 
-  // Live Cubic Bezier Rubber-Band Wire while connecting
+  // Live Dynamic Floating Rubber-Band Wire with Directional Flow Arrow
   let rubberBandPath = ''
+  let rubberBandTgt = { x: 0, y: 0 }
+  let rubberBandAngle = 0
+  let rubberBandMid = { x: 0, y: 0 }
+  let rubberBandMidAngle = 0
+
   if (connectingSourceId) {
     const srcNode = nodeMap.get(connectingSourceId)
     if (srcNode) {
-      const srcX = srcNode.position.x + NODE_DIMENSIONS.width
-      const srcY = srcNode.position.y + NODE_DIMENSIONS.height / 2
+      const targetPos = hoveredTargetNodeId
+        ? nodeMap.get(hoveredTargetNodeId)?.position || mouseCanvasPos
+        : mouseCanvasPos
+      const targetDim = hoveredTargetNodeId ? NODE_DIMENSIONS : { width: 10, height: 10 }
+
+      const srcIntersection = getNodeIntersection(
+        { position: srcNode.position, measured: NODE_DIMENSIONS },
+        { position: targetPos, measured: targetDim }
+      )
 
       let tgtX = mouseCanvasPos.x
       let tgtY = mouseCanvasPos.y
 
-      // Snap to hovered target node input socket if hovering over one
       if (hoveredTargetNodeId) {
         const hNode = nodeMap.get(hoveredTargetNodeId)
         if (hNode) {
-          tgtX = hNode.position.x
-          tgtY = hNode.position.y + NODE_DIMENSIONS.height / 2
+          const tgtIntersection = getNodeIntersection(
+            { position: hNode.position, measured: NODE_DIMENSIONS },
+            { position: srcNode.position, measured: NODE_DIMENSIONS }
+          )
+          tgtX = tgtIntersection.x
+          tgtY = tgtIntersection.y
         }
       }
 
-      const dx = Math.max(Math.abs(tgtX - srcX) * 0.55, 50)
-      const ctrl1X = srcX + dx
-      const ctrl1Y = srcY
-      const ctrl2X = tgtX - dx
-      const ctrl2Y = tgtY
+      const srcX = srcIntersection.x
+      const srcY = srcIntersection.y
 
-      rubberBandPath = `M ${srcX} ${srcY} C ${ctrl1X} ${ctrl1Y}, ${ctrl2X} ${ctrl2Y}, ${tgtX} ${tgtY}`
+      rubberBandPath = `M ${srcX} ${srcY} L ${tgtX} ${tgtY}`
+      rubberBandTgt = { x: tgtX, y: tgtY }
+      rubberBandAngle = Math.atan2(tgtY - srcY, tgtX - srcX) * (180 / Math.PI)
     }
   }
 
@@ -530,9 +813,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         backgroundColor: '#090d16',
         cursor: isPanning
           ? 'grabbing'
+          : isSpacePressed
+          ? 'grab'
           : knifeCut.active
           ? 'crosshair'
           : connectingSourceId
+          ? 'crosshair'
+          : selectionBox
           ? 'crosshair'
           : 'default',
         userSelect: 'none',
@@ -551,7 +838,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
         }}
       >
-        {/* SVG Layer: Grid, Edges, Connecting Wire, Particles, Knife Line */}
+        {/* SVG Layer: Grid, Edges, Connecting Wire, Particles, Knife Line, Selection Marquee */}
         <svg
           style={{
             position: 'absolute',
@@ -590,6 +877,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             const tgtNode = nodeMap.get(tx.target)
             if (!srcNode || !tgtNode) return null
 
+            const isBidirectional = transactions.some(
+              (other) =>
+                other.id !== tx.id &&
+                other.source === tx.target &&
+                other.target === tx.source
+            )
+
             return (
               <EdgeView
                 key={tx.id}
@@ -597,8 +891,11 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                 sourceNode={srcNode}
                 targetNode={tgtNode}
                 currencies={currencies}
-                selected={selectedTransactionId === tx.id}
+                selected={selectedTransactionIds.has(tx.id) || selectedTransactionId === tx.id}
+                isBidirectional={isBidirectional}
                 onSelect={() => {
+                  setSelectedTransactionIds(new Set([tx.id]))
+                  setSelectedNodeIds(new Set())
                   onSelectTransaction(tx.id)
                   onSelectNode(null)
                 }}
@@ -607,32 +904,32 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             )
           })}
 
-          {/* Live Blender-Style Cubic Bezier Connecting Wire */}
+          {/* Live Easy Connect Straight Wire with Arrowhead */}
           {connectingSourceId && rubberBandPath && (
             <g pointerEvents="none">
               {/* Outer glow */}
               <path
                 d={rubberBandPath}
-                stroke="#38bdf8"
+                stroke={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
                 strokeWidth={5}
-                strokeOpacity={0.3}
+                strokeOpacity={0.25}
                 fill="none"
               />
-              {/* Core wire */}
+              {/* Straight wire */}
               <path
                 d={rubberBandPath}
-                stroke="#38bdf8"
-                strokeWidth={2.5}
+                stroke={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
+                strokeWidth={2}
                 strokeDasharray={hoveredTargetNodeId ? undefined : '5,5'}
                 fill="none"
               />
-              {/* Target socket snap circle */}
-              <circle
-                cx={hoveredTargetNodeId ? nodeMap.get(hoveredTargetNodeId)?.position.x : mouseCanvasPos.x}
-                cy={hoveredTargetNodeId ? (nodeMap.get(hoveredTargetNodeId)?.position.y ?? 0) + NODE_DIMENSIONS.height / 2 : mouseCanvasPos.y}
-                r={hoveredTargetNodeId ? 8 : 4}
-                fill={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
-              />
+              {/* Directional Arrowhead pointing at target endpoint */}
+              <g transform={`translate(${rubberBandTgt.x}, ${rubberBandTgt.y}) rotate(${rubberBandAngle})`}>
+                <polygon
+                  points="-10,-5 0,0 -10,5 -7,0"
+                  fill={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
+                />
+              </g>
             </g>
           )}
 
@@ -662,6 +959,23 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             </g>
           )}
 
+          {/* Rectangle Selection Marquee Box */}
+          {selectionBox && (
+            <g pointerEvents="none" className="selection-marquee" data-testid="selection-marquee">
+              <rect
+                x={Math.min(selectionBox.startX, selectionBox.currentX)}
+                y={Math.min(selectionBox.startY, selectionBox.currentY)}
+                width={Math.abs(selectionBox.currentX - selectionBox.startX)}
+                height={Math.abs(selectionBox.currentY - selectionBox.startY)}
+                fill="rgba(56, 189, 248, 0.14)"
+                stroke="#38bdf8"
+                strokeWidth={1.5}
+                strokeDasharray="4,3"
+                rx={2}
+              />
+            </g>
+          )}
+
           {/* Animated Flow Particles */}
           <ParticleLayer
             events={recentEvents}
@@ -686,11 +1000,14 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
               <NodeView
                 node={node}
                 currencies={currencies}
-                selected={selectedNodeId === node.id}
+                selected={selectedNodeIds.has(node.id) || selectedNodeId === node.id}
                 isConnectingSource={connectingSourceId === node.id}
-                isPotentialTarget={connectingSourceId !== null && connectingSourceId !== node.id && hoveredTargetNodeId === node.id}
+                isPotentialTarget={connectingSourceId !== null && connectingSourceId !== node.id}
+                isHoveredTarget={connectingSourceId !== null && connectingSourceId !== node.id && hoveredTargetNodeId === node.id}
                 viewCurrencyId={viewCurrencyId}
                 onSelect={() => {
+                  setSelectedNodeIds(new Set([node.id]))
+                  setSelectedTransactionIds(new Set())
                   onSelectNode(node.id)
                   onSelectTransaction(null)
                 }}
@@ -842,6 +1159,24 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         >
           <Scissors size={12} />
           <span>Ctrl+RMB Cut</span>
+        </div>
+
+        <div style={{ width: '1px', height: '20px', backgroundColor: '#334155', margin: '0 2px' }} />
+
+        {/* Box Select tool hint indicator */}
+        <div
+          title="Box Select: Click and drag on canvas to select multiple nodes & edges. Press Delete or Backspace to delete."
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 6px',
+            fontSize: '10px',
+            color: '#38bdf8',
+          }}
+        >
+          <Square size={12} />
+          <span>Box Select</span>
         </div>
       </div>
 

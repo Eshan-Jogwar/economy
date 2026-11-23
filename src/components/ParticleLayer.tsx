@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { TransactionExecutionEvent, Currency } from '../types/simulation'
+import { getEdgeParams } from '../utils'
 
 interface ParticleLayerProps {
   events: TransactionExecutionEvent[]
@@ -27,12 +28,9 @@ export const ParticleLayer: React.FC<ParticleLayerProps> = ({
   events,
   currencies,
   nodePositions,
-  nodeDimensions = { width: 220, height: 130 },
+  nodeDimensions = { width: 200, height: 80 },
 }) => {
   const [particles, setParticles] = useState<ActiveParticle[]>([])
-
-  const nodeWidth = nodeDimensions.width
-  const nodeHeight = nodeDimensions.height
 
   useEffect(() => {
     if (!events || events.length === 0) return
@@ -48,11 +46,34 @@ export const ParticleLayer: React.FC<ParticleLayerProps> = ({
       const srcCur = currencies.find((c) => c.id === ev.sourceCurrencyId)
       const tgtCur = currencies.find((c) => c.id === ev.targetCurrencyId)
 
-      // Start at source output socket, end at target input socket
-      const sourceX = srcPos.x + nodeWidth
-      const sourceY = srcPos.y + nodeHeight / 2
-      const targetX = tgtPos.x
-      const targetY = tgtPos.y + nodeHeight / 2
+      // Dynamic floating border-to-border straight path
+      const edgeParams = getEdgeParams(
+        { position: srcPos, measured: nodeDimensions },
+        { position: tgtPos, measured: nodeDimensions }
+      )
+
+      let { sx: sourceX, sy: sourceY, tx: targetX, ty: targetY } = edgeParams
+
+      // Bidirectional parallel offset
+      const isBidi = events.some(
+        (o) =>
+          o.id !== ev.id &&
+          o.sourceNodeId === ev.targetNodeId &&
+          o.targetNodeId === ev.sourceNodeId
+      )
+
+      if (isBidi) {
+        const dx = targetX - sourceX
+        const dy = targetY - sourceY
+        const len = Math.sqrt(dx * dx + dy * dy) || 1
+        const offset = 12
+        const nx = -dy / len
+        const ny = dx / len
+        sourceX += nx * offset
+        sourceY += ny * offset
+        targetX += nx * offset
+        targetY += ny * offset
+      }
 
       newParticles.push({
         id: `particle-${ev.id}-${now}-${idx}`,
@@ -73,7 +94,7 @@ export const ParticleLayer: React.FC<ParticleLayerProps> = ({
     if (newParticles.length > 0) {
       setParticles((prev) => [...prev.slice(-30), ...newParticles])
     }
-  }, [events, nodePositions, currencies, nodeWidth, nodeHeight])
+  }, [events, nodePositions, currencies, nodeDimensions])
 
   useEffect(() => {
     if (particles.length === 0) return
