@@ -98,6 +98,8 @@ export const EasyConnectExample = () => {
         defaultEdgeOptions={defaultEdgeOptions}
         connectionLineComponent={CustomConnectionLine}
         connectionLineStyle={connectionLineStyle}
+        selectionOnDrag={true}
+        panOnDrag={[1, 2]}
       >
         <Background />
       </ReactFlow>

@@ -264,3 +264,76 @@ test('node inspector allows inspecting unified balance and viewing value in othe
   expect(screen.getByDisplayValue('1200')).toBeInTheDocument()
   expect(screen.getByDisplayValue('1800')).toBeInTheDocument()
 })
+
+test('rectangle selection tool selects nodes within drag box and deletes them with Delete key', () => {
+  const { container } = render(<App />)
+
+  // Verify initial nodes exist
+  expect(screen.getByText(/Solar Realm/i)).toBeInTheDocument()
+  expect(screen.getByText(/Lunar Realm/i)).toBeInTheDocument()
+  expect(screen.getByText(/Neutral Exchange Hub/i)).toBeInTheDocument()
+
+  const canvasContainer = container.querySelector('.graph-canvas-container')
+  expect(canvasContainer).toBeInTheDocument()
+
+  // 1. Mouse down on canvas at clientX: 40, clientY: 40 (canvas space x: 0, y: 0)
+  fireEvent.mouseDown(canvasContainer!, { button: 0, clientX: 40, clientY: 40 })
+
+  // 2. Mouse move across to clientX: 800, clientY: 500
+  fireEvent.mouseMove(window, { clientX: 800, clientY: 500 })
+
+  // Marquee selection box should be rendered
+  const marquee = container.querySelector('.selection-marquee rect')
+  expect(marquee).toBeInTheDocument()
+
+  // Mouse up to complete selection
+  fireEvent.mouseUp(window)
+
+  // Marquee box disappears on release, but nodes remain selected
+  expect(container.querySelector('.selection-marquee')).not.toBeInTheDocument()
+
+  const selectedNodeCards = container.querySelectorAll('.node-selected')
+  expect(selectedNodeCards.length).toBeGreaterThan(0)
+
+  // 3. Press Delete key to remove all selected items
+  fireEvent.keyDown(window, { key: 'Delete' })
+
+  // Solar Realm and Lunar Realm were inside the rectangle and are now deleted!
+  expect(screen.queryByText(/Solar Realm/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Lunar Realm/i)).not.toBeInTheDocument()
+})
+
+test('Escape key clears rectangle selection', () => {
+  const { container } = render(<App />)
+
+  const canvasContainer = container.querySelector('.graph-canvas-container')
+  fireEvent.mouseDown(canvasContainer!, { button: 0, clientX: 40, clientY: 40 })
+  fireEvent.mouseMove(window, { clientX: 800, clientY: 500 })
+  fireEvent.mouseUp(window)
+
+  expect(container.querySelectorAll('.node-selected').length).toBeGreaterThan(0)
+
+  // Press Escape to clear selection
+  fireEvent.keyDown(window, { key: 'Escape' })
+
+  expect(container.querySelectorAll('.node-selected').length).toBe(0)
+})
+
+test('can delete selected items using Backspace or x key', () => {
+  const { container } = render(<App />)
+
+  const canvasContainer = container.querySelector('.graph-canvas-container')
+  // Select everything
+  fireEvent.mouseDown(canvasContainer!, { button: 0, clientX: 0, clientY: 0 })
+  fireEvent.mouseMove(window, { clientX: 1000, clientY: 1000 })
+  fireEvent.mouseUp(window)
+
+  expect(container.querySelectorAll('.node-selected').length).toBeGreaterThan(0)
+
+  // Press x key to delete
+  fireEvent.keyDown(window, { key: 'x' })
+
+  expect(screen.queryByText(/Solar Realm/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Lunar Realm/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Neutral Exchange Hub/i)).not.toBeInTheDocument()
+})
