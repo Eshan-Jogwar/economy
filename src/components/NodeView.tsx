@@ -24,6 +24,7 @@ interface NodeViewProps {
   selected?: boolean
   isConnectingSource?: boolean
   isPotentialTarget?: boolean
+  isHoveredTarget?: boolean
   viewCurrencyId?: string
   onSelect: () => void
   onStartConnect: (e: React.MouseEvent, nodeId: string) => void
@@ -37,6 +38,7 @@ export const NodeView: React.FC<NodeViewProps> = ({
   selected = false,
   isConnectingSource = false,
   isPotentialTarget = false,
+  isHoveredTarget = false,
   viewCurrencyId = 'native',
   onSelect,
   onStartConnect,
@@ -193,6 +195,35 @@ export const NodeView: React.FC<NodeViewProps> = ({
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {/* Easy Connect Trigger */}
+          <button
+            type="button"
+            className="easy-connect-btn"
+            title="Easy Connect: Drag to connect to another node"
+            onMouseDown={(e) => {
+              e.stopPropagation()
+              onStartConnect(e, node.id)
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onStartConnect(e, node.id)
+            }}
+            style={{
+              padding: '2px 5px',
+              backgroundColor: isConnectingSource ? '#f59e0b' : 'rgba(56, 189, 248, 0.15)',
+              border: '1px solid #38bdf844',
+              borderRadius: '4px',
+              color: isConnectingSource ? '#ffffff' : '#38bdf8',
+              fontSize: '9px',
+              fontWeight: 600,
+              cursor: 'crosshair',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
+            }}
+          >
+            Connect ➔
+          </button>
           <span
             style={{
               fontSize: '9px',
@@ -210,6 +241,42 @@ export const NodeView: React.FC<NodeViewProps> = ({
           <GripHorizontal size={14} color="#64748b" />
         </div>
       </div>
+
+      {/* Easy Connect Target Feedback Banner */}
+      {isPotentialTarget && (
+        <div
+          style={{
+            backgroundColor: isHoveredTarget ? '#10b98133' : '#10b98118',
+            borderBottom: isHoveredTarget ? '1px solid #34d399' : '1px dashed #34d39966',
+            padding: '4px 8px',
+            fontSize: '10px',
+            fontWeight: 600,
+            color: '#34d399',
+            textAlign: 'center',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '4px',
+          }}
+        >
+          <span>▼ Drop here to connect</span>
+        </div>
+      )}
+      {isConnectingSource && (
+        <div
+          style={{
+            backgroundColor: '#f59e0b22',
+            borderBottom: '1px solid #f59e0b',
+            padding: '3px 8px',
+            fontSize: '10px',
+            fontWeight: 600,
+            color: '#f59e0b',
+            textAlign: 'center',
+          }}
+        >
+          Connecting from here ➔
+        </div>
+      )}
 
       {/* Unified Money & Value Section */}
       <div style={{ padding: '10px 10px' }}>

@@ -45,6 +45,7 @@ const PRESETS = [
   { key: 'dual-currency', label: 'Dual Currency FX Bridge' },
   { key: 'circular-economy', label: 'Circular Economy with Bank & Sink' },
   { key: 'three-zone', label: 'Three-Zone Trade Network' },
+  { key: 'easy-connect-example', label: 'Easy Connect (ReactFlow)' },
 ]
 
 const SPEEDS = [

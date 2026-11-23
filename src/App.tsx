@@ -26,6 +26,7 @@ import { CreateNodeModal } from './components/CreateNodeModal'
 import { CreateEdgeModal } from './components/CreateEdgeModal'
 import { MetricsDashboard } from './components/MetricsDashboard'
 import { TransactionLog } from './components/TransactionLog'
+import { EasyConnectExample } from './EasyConnectExample'
 
 export function App() {
   // Initialize with Preset 1 (Dual Currency FX Bridge)
@@ -126,6 +127,8 @@ export function App() {
       setState(circularEconomyWithBankAndSink())
     } else if (presetKey === 'three-zone') {
       setState(threeZoneTradeNetwork())
+    } else if (presetKey === 'easy-connect-example') {
+      setState(blankCanvas())
     } else {
       // Blank canvas: completely empty graph for user-driven creation
       setState(blankCanvas())
@@ -417,23 +420,27 @@ export function App() {
       >
         {/* Interactive Graph Canvas */}
         <div style={{ flex: 1, position: 'relative', height: '100%' }}>
-          <GraphCanvas
-            nodes={state.nodes}
-            transactions={state.transactions}
-            currencies={state.currencies}
-            recentEvents={recentEvents}
-            selectedNodeId={selectedNodeId}
-            selectedTransactionId={selectedTransactionId}
-            viewCurrencyId={viewCurrencyId}
-            onSelectNode={setSelectedNodeId}
-            onSelectTransaction={setSelectedTransactionId}
-            onUpdateNodePosition={handleUpdateNodePosition}
-            onRequestCreateNode={handleRequestCreateNode}
-            onDeleteNode={handleDeleteNode}
-            onDuplicateNode={handleDuplicateNode}
-            onRequestCreateTransaction={handleRequestCreateTransaction}
-            onDeleteTransaction={handleDeleteTransaction}
-          />
+          {activePresetKey === 'easy-connect-example' ? (
+            <EasyConnectExample />
+          ) : (
+            <GraphCanvas
+              nodes={state.nodes}
+              transactions={state.transactions}
+              currencies={state.currencies}
+              recentEvents={recentEvents}
+              selectedNodeId={selectedNodeId}
+              selectedTransactionId={selectedTransactionId}
+              viewCurrencyId={viewCurrencyId}
+              onSelectNode={setSelectedNodeId}
+              onSelectTransaction={setSelectedTransactionId}
+              onUpdateNodePosition={handleUpdateNodePosition}
+              onRequestCreateNode={handleRequestCreateNode}
+              onDeleteNode={handleDeleteNode}
+              onDuplicateNode={handleDuplicateNode}
+              onRequestCreateTransaction={handleRequestCreateTransaction}
+              onDeleteTransaction={handleDeleteTransaction}
+            />
+          )}
         </div>
 
         {/* Right Sidebar: Node or Edge Inspector */}

@@ -1,5 +1,7 @@
 import React from 'react'
+import { Position } from '@xyflow/react'
 import { SimulationTransaction, Currency, SimulationNode } from '../types/simulation'
+import { getEdgeParams } from '../utils'
 
 interface EdgeViewProps {
   transaction: SimulationTransaction
@@ -26,24 +28,42 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
   const strokeColor = sourceCurrency?.color || '#94a3b8'
   const isMultiCurrency = transaction.sourceCurrencyId !== transaction.targetCurrencyId
 
-  // Sockets: source right edge to target left edge
-  const srcX = sourceNode.position.x + nodeDimensions.width
-  const srcY = sourceNode.position.y + nodeDimensions.height / 2
-  const tgtX = targetNode.position.x
-  const tgtY = targetNode.position.y + nodeDimensions.height / 2
+  // Calculate dynamic floating connection intersection points
+  const edgeParams = getEdgeParams(
+    { position: sourceNode.position, measured: nodeDimensions },
+    { position: targetNode.position, measured: nodeDimensions }
+  )
 
-  // Blender-style cubic Bezier curve control points
-  const dx = Math.max(Math.abs(tgtX - srcX) * 0.55, 60)
-  const ctrl1X = srcX + dx
-  const ctrl1Y = srcY
-  const ctrl2X = tgtX - dx
-  const ctrl2Y = tgtY
+  const { sx, sy, tx, ty, sourcePos, targetPos } = edgeParams
 
-  const pathData = `M ${srcX} ${srcY} C ${ctrl1X} ${ctrl1Y}, ${ctrl2X} ${ctrl2Y}, ${tgtX} ${tgtY}`
+  // Dynamic cubic Bezier curve control points based on facing perimeters
+  const dx = Math.max(Math.abs(tx - sx) * 0.5, 45)
+  const dy = Math.max(Math.abs(ty - sy) * 0.5, 45)
 
-  // Center badge position at t = 0.5
-  const badgeX = 0.125 * srcX + 0.375 * ctrl1X + 0.375 * ctrl2X + 0.125 * tgtX
-  const badgeY = 0.125 * srcY + 0.375 * ctrl1Y + 0.375 * ctrl2Y + 0.125 * tgtY
+  let ctrl1X = sx
+  let ctrl1Y = sy
+  if (sourcePos === Position.Right) ctrl1X = sx + dx
+  else if (sourcePos === Position.Left) ctrl1X = sx - dx
+  else if (sourcePos === Position.Top) ctrl1Y = sy - dy
+  else if (sourcePos === Position.Bottom) ctrl1Y = sy + dy
+
+  let ctrl2X = tx
+  let ctrl2Y = ty
+  if (targetPos === Position.Left) ctrl2X = tx - dx
+  else if (targetPos === Position.Right) ctrl2X = tx + dx
+  else if (targetPos === Position.Top) ctrl2Y = ty - dy
+  else if (targetPos === Position.Bottom) ctrl2Y = ty + dy
+
+  const pathData = `M ${sx} ${sy} C ${ctrl1X} ${ctrl1Y}, ${ctrl2X} ${ctrl2Y}, ${tx} ${ty}`
+
+  // Midpoint badge position at t = 0.5
+  const badgeX = 0.125 * sx + 0.375 * ctrl1X + 0.375 * ctrl2X + 0.125 * tx
+  const badgeY = 0.125 * sy + 0.375 * ctrl1Y + 0.375 * ctrl2Y + 0.125 * ty
+
+  // Derivative tangent vector at t = 0.5 to calculate orientation of flow arrow
+  const tangentX = 0.75 * (ctrl1X - sx) + 1.5 * (ctrl2X - ctrl1X) + 0.75 * (tx - ctrl2X)
+  const tangentY = 0.75 * (ctrl1Y - sy) + 1.5 * (ctrl2Y - ctrl1Y) + 0.75 * (ty - ctrl2Y)
+  const flowAngle = Math.atan2(tangentY, tangentX) * (180 / Math.PI)
 
   let transferRuleText = ''
   if (transaction.amountRule.type === 'fixed') {
@@ -64,16 +84,20 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
       style={{ cursor: 'pointer' }}
     >
       <defs>
+        {/* Terminal Arrow Marker showing connection target flow */}
         <marker
           id={markerId}
-          viewBox="0 0 10 10"
-          refX="6"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
+          viewBox="0 0 12 12"
+          refX="10"
+          refY="6"
+          markerWidth="8"
+          markerHeight="8"
           orient="auto-start-reverse"
         >
-          <path d="M 0 1 L 10 5 L 0 9 z" fill={selected ? '#38bdf8' : strokeColor} />
+          <path
+            d="M 1 2 L 11 6 L 1 10 L 3.5 6 Z"
+            fill={selected ? '#38bdf8' : strokeColor}
+          />
         </marker>
       </defs>
 
@@ -98,7 +122,7 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
         />
       )}
 
-      {/* Active Directed Edge Wire */}
+      {/* Active Directed Edge Wire with Flow Arrow at target end */}
       <path
         d={pathData}
         fill="none"
@@ -110,16 +134,31 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
         strokeLinecap="round"
       />
 
+      {/* Flow Direction Indicator Chevrons along the connection wire */}
+      <g transform={`translate(${badgeX}, ${badgeY}) rotate(${flowAngle})`}>
+        {/* Directional arrowhead showing flow towards target */}
+        <polygon
+          points="-8,-5 2,0 -8,5 -4,0"
+          fill={selected ? '#38bdf8' : strokeColor}
+          opacity={0.85}
+        />
+        <polygon
+          points="-14,-5 -4,0 -14,5 -10,0"
+          fill={selected ? '#38bdf8' : strokeColor}
+          opacity={0.45}
+        />
+      </g>
+
       {/* Midpoint Label Badge */}
       <g
-        transform={`translate(${badgeX}, ${badgeY})`}
+        transform={`translate(${badgeX}, ${badgeY + 16})`}
         style={{ pointerEvents: 'none' }}
       >
         <rect
-          x="-50"
-          y="-13"
-          width="100"
-          height="26"
+          x="-55"
+          y="-11"
+          width="110"
+          height="22"
           rx="5"
           fill="#0f172a"
           stroke={selected ? '#38bdf8' : '#334155'}
@@ -128,7 +167,7 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
         />
         <text
           x="0"
-          y="-1"
+          y="0"
           fill="#f8fafc"
           fontSize="9"
           fontWeight="600"
@@ -136,12 +175,12 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
           dominantBaseline="middle"
           fontFamily="monospace"
         >
-          {transferRuleText}
+          ➔ {transferRuleText}
         </text>
         {isMultiCurrency && (
           <text
             x="0"
-            y="7"
+            y="9"
             fill={targetCurrency?.color || '#a78bfa'}
             fontSize="8"
             fontWeight="500"
@@ -149,10 +188,12 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
             dominantBaseline="middle"
             fontFamily="monospace"
           >
-            ×{transaction.exchangeRate} {targetCurrency?.symbol || transaction.targetCurrencyId}
+            → {targetCurrency?.symbol || transaction.targetCurrencyId}
           </text>
         )}
       </g>
     </g>
   )
 }
+
+export default EdgeView

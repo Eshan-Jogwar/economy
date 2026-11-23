@@ -18,6 +18,7 @@ import { NodeView } from './NodeView'
 import { EdgeView } from './EdgeView'
 import { ParticleLayer } from './ParticleLayer'
 import { AddNodeMenu } from './AddNodeMenu'
+import { getNodeIntersection } from '../utils'
 
 interface GraphCanvasProps {
   nodes: SimulationNode[]
@@ -485,33 +486,60 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     screenToCanvas,
   ])
 
-  // Live Cubic Bezier Rubber-Band Wire while connecting
+  // Live Dynamic Floating Rubber-Band Wire with Directional Flow Arrow
   let rubberBandPath = ''
+  let rubberBandTgt = { x: 0, y: 0 }
+  let rubberBandAngle = 0
+  let rubberBandMid = { x: 0, y: 0 }
+  let rubberBandMidAngle = 0
+
   if (connectingSourceId) {
     const srcNode = nodeMap.get(connectingSourceId)
     if (srcNode) {
-      const srcX = srcNode.position.x + NODE_DIMENSIONS.width
-      const srcY = srcNode.position.y + NODE_DIMENSIONS.height / 2
+      const targetPos = hoveredTargetNodeId
+        ? nodeMap.get(hoveredTargetNodeId)?.position || mouseCanvasPos
+        : mouseCanvasPos
+      const targetDim = hoveredTargetNodeId ? NODE_DIMENSIONS : { width: 10, height: 10 }
+
+      const srcIntersection = getNodeIntersection(
+        { position: srcNode.position, measured: NODE_DIMENSIONS },
+        { position: targetPos, measured: targetDim }
+      )
 
       let tgtX = mouseCanvasPos.x
       let tgtY = mouseCanvasPos.y
 
-      // Snap to hovered target node input socket if hovering over one
       if (hoveredTargetNodeId) {
         const hNode = nodeMap.get(hoveredTargetNodeId)
         if (hNode) {
-          tgtX = hNode.position.x
-          tgtY = hNode.position.y + NODE_DIMENSIONS.height / 2
+          const tgtIntersection = getNodeIntersection(
+            { position: hNode.position, measured: NODE_DIMENSIONS },
+            { position: srcNode.position, measured: NODE_DIMENSIONS }
+          )
+          tgtX = tgtIntersection.x
+          tgtY = tgtIntersection.y
         }
       }
 
-      const dx = Math.max(Math.abs(tgtX - srcX) * 0.55, 50)
-      const ctrl1X = srcX + dx
+      const srcX = srcIntersection.x
+      const srcY = srcIntersection.y
+
+      const dx = Math.max(Math.abs(tgtX - srcX) * 0.5, 40)
+      const ctrl1X = srcX < tgtX ? srcX + dx : srcX - dx
       const ctrl1Y = srcY
-      const ctrl2X = tgtX - dx
+      const ctrl2X = srcX < tgtX ? tgtX - dx : tgtX + dx
       const ctrl2Y = tgtY
 
       rubberBandPath = `M ${srcX} ${srcY} C ${ctrl1X} ${ctrl1Y}, ${ctrl2X} ${ctrl2Y}, ${tgtX} ${tgtY}`
+      rubberBandTgt = { x: tgtX, y: tgtY }
+      rubberBandAngle = Math.atan2(tgtY - ctrl2Y, tgtX - ctrl2X) * (180 / Math.PI)
+      rubberBandMid = {
+        x: 0.125 * srcX + 0.375 * ctrl1X + 0.375 * ctrl2X + 0.125 * tgtX,
+        y: 0.125 * srcY + 0.375 * ctrl1Y + 0.375 * ctrl2Y + 0.125 * tgtY,
+      }
+      const tanX = 0.75 * (ctrl1X - srcX) + 1.5 * (ctrl2X - ctrl1X) + 0.75 * (tgtX - ctrl2X)
+      const tanY = 0.75 * (ctrl1Y - srcY) + 1.5 * (ctrl2Y - ctrl1Y) + 0.75 * (tgtY - ctrl2Y)
+      rubberBandMidAngle = Math.atan2(tanY, tanX) * (180 / Math.PI)
     }
   }
 
@@ -607,32 +635,46 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             )
           })}
 
-          {/* Live Blender-Style Cubic Bezier Connecting Wire */}
+          {/* Live Easy Connect Floating Wire with Flow Arrow */}
           {connectingSourceId && rubberBandPath && (
             <g pointerEvents="none">
               {/* Outer glow */}
               <path
                 d={rubberBandPath}
-                stroke="#38bdf8"
-                strokeWidth={5}
+                stroke={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
+                strokeWidth={6}
                 strokeOpacity={0.3}
                 fill="none"
               />
               {/* Core wire */}
               <path
                 d={rubberBandPath}
-                stroke="#38bdf8"
+                stroke={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
                 strokeWidth={2.5}
                 strokeDasharray={hoveredTargetNodeId ? undefined : '5,5'}
                 fill="none"
               />
+              {/* Flow Direction Chevron along the wire */}
+              <g transform={`translate(${rubberBandMid.x}, ${rubberBandMid.y}) rotate(${rubberBandMidAngle})`}>
+                <polygon
+                  points="-8,-5 2,0 -8,5 -4,0"
+                  fill={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
+                />
+              </g>
               {/* Target socket snap circle */}
               <circle
-                cx={hoveredTargetNodeId ? nodeMap.get(hoveredTargetNodeId)?.position.x : mouseCanvasPos.x}
-                cy={hoveredTargetNodeId ? (nodeMap.get(hoveredTargetNodeId)?.position.y ?? 0) + NODE_DIMENSIONS.height / 2 : mouseCanvasPos.y}
-                r={hoveredTargetNodeId ? 8 : 4}
+                cx={rubberBandTgt.x}
+                cy={rubberBandTgt.y}
+                r={hoveredTargetNodeId ? 7 : 4}
                 fill={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
               />
+              {/* Directional Arrowhead pointing at target endpoint */}
+              <g transform={`translate(${rubberBandTgt.x}, ${rubberBandTgt.y}) rotate(${rubberBandAngle})`}>
+                <polygon
+                  points="-12,-6 0,0 -12,6 -8,0"
+                  fill={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
+                />
+              </g>
             </g>
           )}
 
@@ -688,7 +730,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                 currencies={currencies}
                 selected={selectedNodeId === node.id}
                 isConnectingSource={connectingSourceId === node.id}
-                isPotentialTarget={connectingSourceId !== null && connectingSourceId !== node.id && hoveredTargetNodeId === node.id}
+                isPotentialTarget={connectingSourceId !== null && connectingSourceId !== node.id}
+                isHoveredTarget={connectingSourceId !== null && connectingSourceId !== node.id && hoveredTargetNodeId === node.id}
                 viewCurrencyId={viewCurrencyId}
                 onSelect={() => {
                   onSelectNode(node.id)
