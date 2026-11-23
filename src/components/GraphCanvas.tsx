@@ -38,7 +38,7 @@ interface GraphCanvasProps {
   onDeleteTransaction: (txId: string) => void
 }
 
-const NODE_DIMENSIONS = { width: 220, height: 130 }
+const NODE_DIMENSIONS = { width: 200, height: 80 }
 
 // Helper: 2D line segment orientation
 function ccw(p1: { x: number; y: number }, p2: { x: number; y: number }, p3: { x: number; y: number }): boolean {
@@ -55,50 +55,14 @@ function segmentsIntersect(
   return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d)
 }
 
-// Helper: Check if knife line intersects cubic Bezier edge
+// Helper: Check if knife line intersects straight edge line
 function knifeCutsEdge(
   knifeStart: { x: number; y: number },
   knifeEnd: { x: number; y: number },
   src: { x: number; y: number },
   tgt: { x: number; y: number }
 ): boolean {
-  const srcX = src.x + NODE_DIMENSIONS.width
-  const srcY = src.y + NODE_DIMENSIONS.height / 2
-  const tgtX = tgt.x
-  const tgtY = tgt.y + NODE_DIMENSIONS.height / 2
-
-  const dx = Math.max(Math.abs(tgtX - srcX) * 0.55, 60)
-  const ctrl1X = srcX + dx
-  const ctrl1Y = srcY
-  const ctrl2X = tgtX - dx
-  const ctrl2Y = tgtY
-
-  // Sample 8 points along the cubic bezier
-  const samples: { x: number; y: number }[] = []
-  const steps = 8
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps
-    const invT = 1 - t
-    const x =
-      invT * invT * invT * srcX +
-      3 * invT * invT * t * ctrl1X +
-      3 * invT * t * t * ctrl2X +
-      t * t * t * tgtX
-    const y =
-      invT * invT * invT * srcY +
-      3 * invT * invT * t * ctrl1Y +
-      3 * invT * t * t * ctrl2Y +
-      t * t * t * tgtY
-    samples.push({ x, y })
-  }
-
-  for (let i = 0; i < samples.length - 1; i++) {
-    if (segmentsIntersect(knifeStart, knifeEnd, samples[i], samples[i + 1])) {
-      return true
-    }
-  }
-
-  return false
+  return segmentsIntersect(knifeStart, knifeEnd, src, tgt)
 }
 
 export const GraphCanvas: React.FC<GraphCanvasProps> = ({
@@ -374,7 +338,15 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           const sNode = nodeMap.get(tx.source)
           const tNode = nodeMap.get(tx.target)
           if (!sNode || !tNode) return false
-          return knifeCutsEdge(knifeCut.startCanvas, knifeCut.endCanvas, sNode.position, tNode.position)
+          const sInt = getNodeIntersection(
+            { position: sNode.position, measured: NODE_DIMENSIONS },
+            { position: tNode.position, measured: NODE_DIMENSIONS }
+          )
+          const tInt = getNodeIntersection(
+            { position: tNode.position, measured: NODE_DIMENSIONS },
+            { position: sNode.position, measured: NODE_DIMENSIONS }
+          )
+          return knifeCutsEdge(knifeCut.startCanvas, knifeCut.endCanvas, sInt, tInt)
         })
 
         cutEdges.forEach((tx) => onDeleteTransaction(tx.id))
@@ -524,22 +496,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       const srcX = srcIntersection.x
       const srcY = srcIntersection.y
 
-      const dx = Math.max(Math.abs(tgtX - srcX) * 0.5, 40)
-      const ctrl1X = srcX < tgtX ? srcX + dx : srcX - dx
-      const ctrl1Y = srcY
-      const ctrl2X = srcX < tgtX ? tgtX - dx : tgtX + dx
-      const ctrl2Y = tgtY
-
-      rubberBandPath = `M ${srcX} ${srcY} C ${ctrl1X} ${ctrl1Y}, ${ctrl2X} ${ctrl2Y}, ${tgtX} ${tgtY}`
+      rubberBandPath = `M ${srcX} ${srcY} L ${tgtX} ${tgtY}`
       rubberBandTgt = { x: tgtX, y: tgtY }
-      rubberBandAngle = Math.atan2(tgtY - ctrl2Y, tgtX - ctrl2X) * (180 / Math.PI)
-      rubberBandMid = {
-        x: 0.125 * srcX + 0.375 * ctrl1X + 0.375 * ctrl2X + 0.125 * tgtX,
-        y: 0.125 * srcY + 0.375 * ctrl1Y + 0.375 * ctrl2Y + 0.125 * tgtY,
-      }
-      const tanX = 0.75 * (ctrl1X - srcX) + 1.5 * (ctrl2X - ctrl1X) + 0.75 * (tgtX - ctrl2X)
-      const tanY = 0.75 * (ctrl1Y - srcY) + 1.5 * (ctrl2Y - ctrl1Y) + 0.75 * (tgtY - ctrl2Y)
-      rubberBandMidAngle = Math.atan2(tanY, tanX) * (180 / Math.PI)
+      rubberBandAngle = Math.atan2(tgtY - srcY, tgtX - srcX) * (180 / Math.PI)
     }
   }
 
@@ -635,43 +594,29 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             )
           })}
 
-          {/* Live Easy Connect Floating Wire with Flow Arrow */}
+          {/* Live Easy Connect Straight Wire with Arrowhead */}
           {connectingSourceId && rubberBandPath && (
             <g pointerEvents="none">
               {/* Outer glow */}
               <path
                 d={rubberBandPath}
                 stroke={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
-                strokeWidth={6}
-                strokeOpacity={0.3}
+                strokeWidth={5}
+                strokeOpacity={0.25}
                 fill="none"
               />
-              {/* Core wire */}
+              {/* Straight wire */}
               <path
                 d={rubberBandPath}
                 stroke={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
-                strokeWidth={2.5}
+                strokeWidth={2}
                 strokeDasharray={hoveredTargetNodeId ? undefined : '5,5'}
                 fill="none"
-              />
-              {/* Flow Direction Chevron along the wire */}
-              <g transform={`translate(${rubberBandMid.x}, ${rubberBandMid.y}) rotate(${rubberBandMidAngle})`}>
-                <polygon
-                  points="-8,-5 2,0 -8,5 -4,0"
-                  fill={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
-                />
-              </g>
-              {/* Target socket snap circle */}
-              <circle
-                cx={rubberBandTgt.x}
-                cy={rubberBandTgt.y}
-                r={hoveredTargetNodeId ? 7 : 4}
-                fill={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
               />
               {/* Directional Arrowhead pointing at target endpoint */}
               <g transform={`translate(${rubberBandTgt.x}, ${rubberBandTgt.y}) rotate(${rubberBandAngle})`}>
                 <polygon
-                  points="-12,-6 0,0 -12,6 -8,0"
+                  points="-10,-5 0,0 -10,5 -7,0"
                   fill={hoveredTargetNodeId ? '#34d399' : '#38bdf8'}
                 />
               </g>

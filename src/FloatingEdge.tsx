@@ -19,10 +19,6 @@ function FloatingEdge({ id, source, target, markerEnd, style }: EdgeProps) {
     targetY: ty,
   })
 
-  // Calculate midpoint and angle for directional flow arrow
-  const midX = (sx + tx) / 2
-  const midY = (sy + ty) / 2
-  const angle = Math.atan2(ty - sy, tx - sx) * (180 / Math.PI)
   const strokeColor = (style?.stroke as string) || '#b1b1b7'
 
   return (
@@ -36,29 +32,18 @@ function FloatingEdge({ id, source, target, markerEnd, style }: EdgeProps) {
         className="react-flow__edge-interaction"
       />
 
-      {/* Main floating edge path with terminal arrow */}
+      {/* Main floating straight edge path with terminal arrow at target edge */}
       <path
         id={id}
         className="react-flow__edge-path"
         d={edgePath}
         markerEnd={markerEnd}
         style={{
-          strokeWidth: 2.5,
+          strokeWidth: 2,
           stroke: strokeColor,
           ...style,
         }}
       />
-
-      {/* Midpoint directional flow arrow showing where connection flows */}
-      <g transform={`translate(${midX}, ${midY}) rotate(${angle})`}>
-        <polygon
-          points="-6,-4 4,0 -6,4 -3,0"
-          fill={strokeColor}
-          stroke={strokeColor}
-          strokeWidth={1}
-          style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }}
-        />
-      </g>
     </g>
   )
 }

@@ -95,7 +95,7 @@ describe('CustomConnectionLine Component', () => {
 
     const arrowPolygon = container.querySelector('polygon')
     expect(arrowPolygon).toBeInTheDocument()
-    expect(arrowPolygon).toHaveAttribute('points', '-12,-6 0,0 -12,6 -8,0')
+    expect(arrowPolygon).toHaveAttribute('points', '-10,-5 0,0 -10,5 -7,0')
   })
 })
 
@@ -106,34 +106,32 @@ describe('Easy Connect Example in App', () => {
     const presetSelect = screen.getByRole('combobox')
     fireEvent.change(presetSelect, { target: { value: 'easy-connect-example' } })
 
-    // Node 1, 2, 3, 4 from EasyConnectExample should be present
-    expect(screen.getByText(/Node 1/i)).toBeInTheDocument()
-    expect(screen.getByText(/Node 2/i)).toBeInTheDocument()
-    expect(screen.getByText(/Node 3/i)).toBeInTheDocument()
-    expect(screen.getByText(/Node 4/i)).toBeInTheDocument()
+    // All 4 nodes from EasyConnectExample say "Drag to connect"
+    expect(screen.getAllByText(/Drag to connect/i).length).toBe(4)
   })
 
-  test('nodes in simulation canvas provide Easy Connect button with flow arrow', () => {
+  test('nodes in simulation canvas provide easy connect by clicking/dragging node body', () => {
     render(<App />)
 
-    const connectBtns = screen.getAllByRole('button', { name: /Connect ➔/i })
-    expect(connectBtns.length).toBeGreaterThanOrEqual(3)
+    // Node body has output socket title for easy connect
+    const nodeBodies = screen.getAllByTitle(/Output Socket/i)
+    expect(nodeBodies.length).toBeGreaterThanOrEqual(3)
 
-    // Clicking Connect ➔ starts easy connect mode
-    fireEvent.click(connectBtns[0])
+    // Clicking node starts easy connect mode
+    fireEvent.click(nodeBodies[0])
 
-    // Target feedback banner should appear on other nodes
-    expect(screen.getAllByText(/Drop here to connect/i).length).toBeGreaterThanOrEqual(1)
+    // Source node displays "Connecting..."
+    expect(screen.getByText(/Connecting\.\.\./i)).toBeInTheDocument()
   })
 
-  test('edges display directional flow arrows indicating direction from source to target', () => {
+  test('edges display straight connection lines with arrowheads pointing at target edge', () => {
     const { container } = render(<App />)
 
     // Markers with arrowId should exist in SVG defs
     const markers = container.querySelectorAll('marker[id^="arrow-"]')
     expect(markers.length).toBeGreaterThan(0)
 
-    // Edge label badge displays flow arrow symbol ➔
-    expect(screen.getByText(/➔ 100 ₲/i)).toBeInTheDocument()
+    // Edge label badge displays transfer amount
+    expect(screen.getByText(/100 ₲/i)).toBeInTheDocument()
   })
 })

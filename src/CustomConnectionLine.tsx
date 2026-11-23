@@ -21,25 +21,22 @@ function CustomConnectionLine({
 
   return (
     <g className="custom-connection-line">
-      {/* Live Connection Path */}
+      {/* Live Straight Connection Path */}
       <path
         style={{
           stroke: strokeColor,
-          strokeWidth: 2.5,
-          strokeDasharray: '6,4',
+          strokeWidth: 2,
+          strokeDasharray: '5,5',
           ...connectionLineStyle,
         }}
         fill="none"
         d={edgePath}
       />
 
-      {/* Origin socket anchor */}
-      <circle cx={fromX} cy={fromY} fill={strokeColor} r={4} />
-
       {/* Target cursor arrowhead clearly indicating where connection flows */}
       <g transform={`translate(${toX}, ${toY}) rotate(${angle})`}>
         <polygon
-          points="-12,-6 0,0 -12,6 -8,0"
+          points="-10,-5 0,0 -10,5 -7,0"
           fill={strokeColor}
           stroke={strokeColor}
           strokeWidth={1}

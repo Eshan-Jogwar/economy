@@ -9,10 +9,10 @@ export default function CustomNode({ id, data }: NodeProps) {
   const displayLabel = data?.label
     ? String(data.label)
     : isTarget
-    ? 'Drop here to connect'
+    ? 'Drop here'
     : isSource
     ? 'Connecting...'
-    : `Node ${id}`
+    : 'Drag to connect'
 
   return (
     <div
@@ -25,18 +25,19 @@ export default function CustomNode({ id, data }: NodeProps) {
         className="customNodeBody"
         style={{
           borderStyle: isTarget ? 'dashed' : 'solid',
-          backgroundColor: isTarget ? '#ffcce3' : isSource ? '#e0e7ff' : '#ccd9f6',
-          borderColor: isTarget ? '#e11d48' : isSource ? '#4f46e5' : '#222138',
-          borderWidth: isTarget ? '3px' : '2px',
+          backgroundColor: isTarget ? '#2a1b24' : isSource ? '#1b2234' : '#181a20',
+          borderColor: isTarget ? '#f43f5e' : isSource ? '#38bdf8' : '#2d3139',
+          borderWidth: isTarget ? '2px' : '1px',
           boxShadow: isTarget
-            ? '0 0 12px rgba(225, 29, 72, 0.4)'
+            ? '0 0 12px rgba(244, 63, 94, 0.4)'
             : isSource
-            ? '0 0 10px rgba(79, 70, 229, 0.35)'
-            : '0 4px 6px rgba(0, 0, 0, 0.1)',
+            ? '0 0 10px rgba(56, 189, 248, 0.35)'
+            : '0 4px 6px rgba(0, 0, 0, 0.2)',
           transition: 'all 0.15s ease',
+          color: '#f8fafc',
+          borderRadius: '10px',
         }}
       >
-        {/* Source Handle: renders when not connecting so dragging anywhere from node connects */}
         {!connection.inProgress && (
           <Handle
             className="customHandle customHandleSource"
@@ -45,7 +46,6 @@ export default function CustomNode({ id, data }: NodeProps) {
           />
         )}
 
-        {/* Target Handle: renders when not connecting or when this is an eligible target */}
         {(!connection.inProgress || isTarget) && (
           <Handle
             className="customHandle customHandleTarget"
@@ -56,19 +56,9 @@ export default function CustomNode({ id, data }: NodeProps) {
         )}
 
         <div style={{ textAlign: 'center', pointerEvents: 'none' }}>
-          <div style={{ fontWeight: 700, fontSize: '13px', color: '#1e293b' }}>
+          <div style={{ fontWeight: 600, fontSize: '13px', color: '#f8fafc' }}>
             {displayLabel}
           </div>
-          {!connection.inProgress && (
-            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
-              Drag to connect ➔
-            </div>
-          )}
-          {isTarget && (
-            <div style={{ fontSize: '10px', color: '#e11d48', fontWeight: 600, marginTop: '2px' }}>
-              ▼ Drop here
-            </div>
-          )}
         </div>
       </div>
     </div>

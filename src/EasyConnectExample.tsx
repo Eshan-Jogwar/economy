@@ -22,25 +22,21 @@ const initialNodes = [
     id: '1',
     type: 'custom',
     position: { x: 0, y: 0 },
-    data: { label: 'Node 1' },
   },
   {
     id: '2',
     type: 'custom',
     position: { x: 250, y: 320 },
-    data: { label: 'Node 2' },
   },
   {
     id: '3',
     type: 'custom',
     position: { x: 40, y: 300 },
-    data: { label: 'Node 3' },
   },
   {
     id: '4',
     type: 'custom',
     position: { x: 300, y: 0 },
-    data: { label: 'Node 4' },
   },
 ]
 
