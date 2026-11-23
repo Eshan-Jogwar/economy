@@ -338,14 +338,27 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           const sNode = nodeMap.get(tx.source)
           const tNode = nodeMap.get(tx.target)
           if (!sNode || !tNode) return false
-          const sInt = getNodeIntersection(
+          let sInt = getNodeIntersection(
             { position: sNode.position, measured: NODE_DIMENSIONS },
             { position: tNode.position, measured: NODE_DIMENSIONS }
           )
-          const tInt = getNodeIntersection(
+          let tInt = getNodeIntersection(
             { position: tNode.position, measured: NODE_DIMENSIONS },
             { position: sNode.position, measured: NODE_DIMENSIONS }
           )
+          const isBidi = transactions.some(
+            (o) => o.id !== tx.id && o.source === tx.target && o.target === tx.source
+          )
+          if (isBidi) {
+            const dx = tInt.x - sInt.x
+            const dy = tInt.y - sInt.y
+            const len = Math.sqrt(dx * dx + dy * dy) || 1
+            const offset = 12
+            const nx = -dy / len
+            const ny = dx / len
+            sInt = { x: sInt.x + nx * offset, y: sInt.y + ny * offset }
+            tInt = { x: tInt.x + nx * offset, y: tInt.y + ny * offset }
+          }
           return knifeCutsEdge(knifeCut.startCanvas, knifeCut.endCanvas, sInt, tInt)
         })
 
@@ -577,6 +590,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             const tgtNode = nodeMap.get(tx.target)
             if (!srcNode || !tgtNode) return null
 
+            const isBidirectional = transactions.some(
+              (other) =>
+                other.id !== tx.id &&
+                other.source === tx.target &&
+                other.target === tx.source
+            )
+
             return (
               <EdgeView
                 key={tx.id}
@@ -585,6 +605,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                 targetNode={tgtNode}
                 currencies={currencies}
                 selected={selectedTransactionId === tx.id}
+                isBidirectional={isBidirectional}
                 onSelect={() => {
                   onSelectTransaction(tx.id)
                   onSelectNode(null)

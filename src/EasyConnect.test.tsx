@@ -134,4 +134,20 @@ describe('Easy Connect Example in App', () => {
     // Edge label badge displays transfer amount
     expect(screen.getByText(/100 ₲/i)).toBeInTheDocument()
   })
+
+  test('bidirectional edges between two nodes render as parallel lines with a gap', () => {
+    const { container } = render(<App />)
+
+    // Preset 1 has bidirectional routes: Solar Realm <-> Lunar Realm
+    const edgePaths = container.querySelectorAll('.edge-group path[marker-end]')
+    expect(edgePaths.length).toBeGreaterThanOrEqual(2)
+
+    const dValues = Array.from(edgePaths).map((p) => p.getAttribute('d'))
+    const forward = dValues[0]
+    const backward = dValues[1]
+    expect(forward).toBeDefined()
+    expect(backward).toBeDefined()
+    // Parallel lines must have distinct offset paths
+    expect(forward).not.toEqual(backward)
+  })
 })

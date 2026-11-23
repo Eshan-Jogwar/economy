@@ -8,6 +8,7 @@ interface EdgeViewProps {
   targetNode: SimulationNode
   currencies: Currency[]
   selected?: boolean
+  isBidirectional?: boolean
   onSelect?: () => void
   nodeDimensions?: { width: number; height: number }
 }
@@ -18,6 +19,7 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
   targetNode,
   currencies,
   selected = false,
+  isBidirectional = false,
   onSelect,
   nodeDimensions = { width: 200, height: 80 },
 }) => {
@@ -30,7 +32,23 @@ export const EdgeView: React.FC<EdgeViewProps> = ({
     { position: targetNode.position, measured: nodeDimensions }
   )
 
-  const { sx, sy, tx, ty } = edgeParams
+  let { sx, sy, tx, ty } = edgeParams
+
+  // If bidirectional (to and fro routes exist between the two nodes),
+  // shift the line perpendicularly so they render as clean parallel lines with a gap
+  if (isBidirectional) {
+    const dx = tx - sx
+    const dy = ty - sy
+    const len = Math.sqrt(dx * dx + dy * dy) || 1
+    const offset = 12 // 24px gap between opposite lines
+    const nx = -dy / len
+    const ny = dx / len
+
+    sx += nx * offset
+    sy += ny * offset
+    tx += nx * offset
+    ty += ny * offset
+  }
 
   // Straight line from source edge to target edge (NO CURVES)
   const pathData = `M ${sx} ${sy} L ${tx} ${ty}`
